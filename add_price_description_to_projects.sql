@@ -1,0 +1,3 @@
+ALTER TABLE projects
+ADD COLUMN price DECIMAL(15, 2) DEFAULT 0.00,
+ADD COLUMN description TEXT NULL;

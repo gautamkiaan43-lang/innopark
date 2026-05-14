@@ -1,0 +1,1677 @@
+{
+  "info": {
+    "name": "Worksuite CRM APIs",
+    "description": "Complete API collection for Worksuite CRM & Operations Suite",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "worksuite-crm"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@crmapp.com\",\n  \"password\": \"Admin@123\",\n  \"role\": \"ADMIN\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Admin Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard/admin",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "admin"]
+            }
+          }
+        },
+        {
+          "name": "Employee Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard/employee",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "employee"]
+            }
+          }
+        },
+        {
+          "name": "Client Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard/client",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "client"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Leads",
+      "item": [
+        {
+          "name": "Get All Leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads?page=1&pageSize=10&status=New&owner_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["leads"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "New"
+                },
+                {
+                  "key": "owner_id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Lead by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads/1",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lead_type\": \"Organization\",\n  \"company_name\": \"Tech Corp\",\n  \"person_name\": \"John Doe\",\n  \"email\": \"john@techcorp.com\",\n  \"phone\": \"+1-234-567-8900\",\n  \"owner_id\": 1,\n  \"managers\": [2, 3],\n  \"status\": \"New\",\n  \"source\": \"Google ads\",\n  \"address\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"value\": 5000,\n  \"due_followup\": \"2024-02-20\",\n  \"notes\": \"Hot lead\",\n  \"probability\": 50,\n  \"call_this_week\": false,\n  \"labels\": [\"Hot Lead\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads",
+              "host": ["{{base_url}}"],
+              "path": ["leads"]
+            }
+          }
+        },
+        {
+          "name": "Update Lead",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Qualified\",\n  \"probability\": 75\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/1",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Lead",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/leads/1",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1"]
+            }
+          }
+        },
+        {
+          "name": "Convert Lead to Client",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/leads/1/convert-to-client",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "1", "convert-to-client"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clients",
+      "item": [
+        {
+          "name": "Get All Clients",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/clients?page=1&pageSize=10&status=Active",
+              "host": ["{{base_url}}"],
+              "path": ["clients"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Active"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Client by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/clients/1",
+              "host": ["{{base_url}}"],
+              "path": ["clients", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Client",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"Tech Corp\",\n  \"owner_id\": 1,\n  \"managers\": [2],\n  \"address\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"zip\": \"10001\",\n  \"country\": \"United States\",\n  \"phone_country_code\": \"+1\",\n  \"phone_number\": \"234-567-8900\",\n  \"website\": \"https://techcorp.com\",\n  \"vat_number\": \"VAT123456\",\n  \"gst_number\": \"\",\n  \"client_groups\": [\"Enterprise\"],\n  \"labels\": [\"VIP\", \"Tech\"],\n  \"currency\": \"USD\",\n  \"currency_symbol\": \"$\",\n  \"disable_online_payment\": false,\n  \"status\": \"Active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/clients",
+              "host": ["{{base_url}}"],
+              "path": ["clients"]
+            }
+          }
+        },
+        {
+          "name": "Update Client",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Inactive\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/clients/1",
+              "host": ["{{base_url}}"],
+              "path": ["clients", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Client",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/clients/1",
+              "host": ["{{base_url}}"],
+              "path": ["clients", "1"]
+            }
+          }
+        },
+        {
+          "name": "Add Client Contact",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"client_id\": 1,\n  \"job_title\": \"CEO\",\n  \"email\": \"john@techcorp.com\",\n  \"phone\": \"+1-234-567-8900\",\n  \"is_primary\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/clients/1/contacts",
+              "host": ["{{base_url}}"],
+              "path": ["clients", "1", "contacts"]
+            }
+          }
+        },
+        {
+          "name": "Get Client Contacts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/clients/1/contacts",
+              "host": ["{{base_url}}"],
+              "path": ["clients", "1", "contacts"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "Get All Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects?page=1&pageSize=10&status=in progress",
+              "host": ["{{base_url}}"],
+              "path": ["projects"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "in progress"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Project by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/1",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"short_code\": \"FVS\",\n  \"project_name\": \"Fingerprint voting system\",\n  \"start_date\": \"2025-10-27\",\n  \"deadline\": \"2026-02-27\",\n  \"no_deadline\": false,\n  \"project_category\": \"Software Development\",\n  \"project_sub_category\": \"Web Application\",\n  \"department_id\": 1,\n  \"client_id\": 1,\n  \"project_summary\": \"A secure voting system\",\n  \"notes\": \"High priority project\",\n  \"public_gantt_chart\": \"enable\",\n  \"public_task_board\": \"enable\",\n  \"task_approval\": \"disable\",\n  \"label\": \"Urgent\",\n  \"project_members\": [1, 2, 3],\n  \"create_public_project\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["projects"]
+            }
+          }
+        },
+        {
+          "name": "Update Project",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\",\n  \"progress\": 100\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/1",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Project",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/1",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "item": [
+        {
+          "name": "Get All Tasks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks?page=1&pageSize=10&status=Incomplete&project_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["tasks"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Incomplete"
+                },
+                {
+                  "key": "project_id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Task by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/1",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Implement authentication\",\n  \"task_category\": \"Development\",\n  \"project_id\": 1,\n  \"start_date\": \"2025-01-19\",\n  \"due_date\": \"2025-01-26\",\n  \"status\": \"Incomplete\",\n  \"assigned_to\": [1, 2],\n  \"description\": \"Implement JWT authentication\",\n  \"priority\": \"High\",\n  \"estimated_time\": \"8h\",\n  \"tags\": [\"backend\", \"auth\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["tasks"]
+            }
+          }
+        },
+        {
+          "name": "Update Task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Done\",\n  \"completed_on\": \"2025-01-25T10:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/1",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/1",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "Get All Invoices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/invoices?page=1&pageSize=10&status=Unpaid&client_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["invoices"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Unpaid"
+                },
+                {
+                  "key": "client_id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Invoice by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/invoices/1",
+              "host": ["{{base_url}}"],
+              "path": ["invoices", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_date\": \"2025-10-29\",\n  \"due_date\": \"2025-11-29\",\n  \"currency\": \"USD\",\n  \"exchange_rate\": 1.0,\n  \"client_id\": 1,\n  \"project_id\": 1,\n  \"calculate_tax\": \"After Discount\",\n  \"bank_account\": \"Primary Account\",\n  \"payment_details\": \"Bank transfer\",\n  \"billing_address\": \"123 Main St, New York\",\n  \"shipping_address\": \"\",\n  \"generated_by\": \"Worksuite\",\n  \"note\": \"Thank you\",\n  \"terms\": \"Thank you for your business.\",\n  \"discount\": 0,\n  \"discount_type\": \"%\",\n  \"items\": [\n    {\n      \"item_name\": \"Electric Toothbrush\",\n      \"description\": \"Rechargeable electric toothbrush\",\n      \"quantity\": 1,\n      \"unit\": \"Pcs\",\n      \"unit_price\": 973,\n      \"tax\": \"GST 10%\",\n      \"amount\": 1070.3\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/invoices",
+              "host": ["{{base_url}}"],
+              "path": ["invoices"]
+            }
+          }
+        },
+        {
+          "name": "Update Invoice",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Paid\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/invoices/1",
+              "host": ["{{base_url}}"],
+              "path": ["invoices", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Invoice",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/invoices/1",
+              "host": ["{{base_url}}"],
+              "path": ["invoices", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Time Log Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"time_log_from\": \"2025-01-01\",\n  \"time_log_to\": \"2025-01-31\",\n  \"client_id\": 1,\n  \"project_id\": 1,\n  \"invoice_date\": \"2025-02-01\",\n  \"due_date\": \"2025-02-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/invoices/create-from-time-logs",
+              "host": ["{{base_url}}"],
+              "path": ["invoices", "create-from-time-logs"]
+            }
+          }
+        },
+        {
+          "name": "Create Recurring Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billing_frequency\": \"Monthly\",\n  \"recurring_start_date\": \"2025-01-01\",\n  \"recurring_total_count\": 12,\n  \"client_id\": 1,\n  \"items\": [\n    {\n      \"item_name\": \"Monthly Subscription\",\n      \"quantity\": 1,\n      \"unit_price\": 1000\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/invoices/create-recurring",
+              "host": ["{{base_url}}"],
+              "path": ["invoices", "create-recurring"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Estimates",
+      "item": [
+        {
+          "name": "Get All Estimates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/estimates?page=1&pageSize=10&status=Waiting",
+              "host": ["{{base_url}}"],
+              "path": ["estimates"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Waiting"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Estimate by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/estimates/1",
+              "host": ["{{base_url}}"],
+              "path": ["estimates", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Estimate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"valid_till\": \"2026-01-20\",\n  \"currency\": \"USD\",\n  \"client_id\": 1,\n  \"project_id\": 1,\n  \"calculate_tax\": \"After Discount\",\n  \"description\": \"Project estimate\",\n  \"note\": \"Note for recipient\",\n  \"terms\": \"Thank you for your business.\",\n  \"discount\": 0,\n  \"discount_type\": \"%\",\n  \"items\": [\n    {\n      \"item_name\": \"Smart Camera\",\n      \"description\": \"4K Ultra HD security camera\",\n      \"quantity\": 1,\n      \"unit\": \"Pcs\",\n      \"unit_price\": 2450,\n      \"tax\": \"GST: 10%\",\n      \"amount\": 2695\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/estimates",
+              "host": ["{{base_url}}"],
+              "path": ["estimates"]
+            }
+          }
+        },
+        {
+          "name": "Update Estimate",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Accepted\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/estimates/1",
+              "host": ["{{base_url}}"],
+              "path": ["estimates", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Estimate",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/estimates/1",
+              "host": ["{{base_url}}"],
+              "path": ["estimates", "1"]
+            }
+          }
+        },
+        {
+          "name": "Convert Estimate to Invoice",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/estimates/1/convert-to-invoice",
+              "host": ["{{base_url}}"],
+              "path": ["estimates", "1", "convert-to-invoice"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Get All Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payments?page=1&pageSize=10&client_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["payments"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "client_id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Payment by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payments/1",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Single Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_id\": 1,\n  \"invoice_id\": 1,\n  \"paid_on\": \"2025-12-21\",\n  \"amount\": 10000,\n  \"currency\": \"USD\",\n  \"exchange_rate\": 1,\n  \"transaction_id\": \"TXN123456\",\n  \"payment_gateway\": \"Razorpay\",\n  \"bank_account\": \"Primary Account | ABC Ltd\",\n  \"remark\": \"Payment received\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments",
+              "host": ["{{base_url}}"],
+              "path": ["payments"]
+            }
+          }
+        },
+        {
+          "name": "Create Bulk Payments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payments\": [\n    {\n      \"invoice_id\": 1,\n      \"payment_date\": \"2025-12-21\",\n      \"payment_method\": \"Offline Payment\",\n      \"offline_payment_method\": \"Cash\",\n      \"bank_account\": \"Primary Account | ABC Ltd\",\n      \"transaction_id\": \"\",\n      \"amount_received\": 2749.00\n    },\n    {\n      \"invoice_id\": 2,\n      \"payment_date\": \"2025-12-21\",\n      \"payment_method\": \"Razorpay\",\n      \"bank_account\": \"Secondary Account | XYZ Inc\",\n      \"transaction_id\": \"TXN789\",\n      \"amount_received\": 45846.00\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "bulk"]
+            }
+          }
+        },
+        {
+          "name": "Update Payment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Complete\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/1",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Payment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payments/1",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Expenses",
+      "item": [
+        {
+          "name": "Get All Expenses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/expenses?page=1&pageSize=10&status=Pending",
+              "host": ["{{base_url}}"],
+              "path": ["expenses"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Pending"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lead_id\": 1,\n  \"deal_id\": null,\n  \"valid_till\": \"2026-01-20\",\n  \"currency\": \"USD\",\n  \"calculate_tax\": \"After Discount\",\n  \"description\": \"Office supplies\",\n  \"note\": \"Monthly purchase\",\n  \"terms\": \"Thank you for your business.\",\n  \"discount\": 0,\n  \"discount_type\": \"%\",\n  \"require_approval\": true,\n  \"items\": [\n    {\n      \"item_name\": \"Office Chair\",\n      \"quantity\": 5,\n      \"unit\": \"Pcs\",\n      \"unit_price\": 2000,\n      \"tax\": \"GST 10%\",\n      \"amount\": 11000\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/expenses",
+              "host": ["{{base_url}}"],
+              "path": ["expenses"]
+            }
+          }
+        },
+        {
+          "name": "Approve Expense",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/expenses/1/approve",
+              "host": ["{{base_url}}"],
+              "path": ["expenses", "1", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Reject Expense",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Budget exceeded\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/expenses/1/reject",
+              "host": ["{{base_url}}"],
+              "path": ["expenses", "1", "reject"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contracts",
+      "item": [
+        {
+          "name": "Get All Contracts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/contracts?page=1&pageSize=10&status=Accepted",
+              "host": ["{{base_url}}"],
+              "path": ["contracts"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Accepted"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Contract",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Training and Workshop Services Contract\",\n  \"contract_date\": \"2025-11-17\",\n  \"valid_until\": \"2026-01-17\",\n  \"client_id\": 1,\n  \"project_id\": null,\n  \"tax\": \"GST 10%\",\n  \"second_tax\": \"\",\n  \"note\": \"Contract terms and conditions\",\n  \"amount\": 160.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contracts",
+              "host": ["{{base_url}}"],
+              "path": ["contracts"]
+            }
+          }
+        },
+        {
+          "name": "Update Contract Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Accepted\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/contracts/1",
+              "host": ["{{base_url}}"],
+              "path": ["contracts", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "item": [
+        {
+          "name": "Get All Subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/subscriptions?page=1&pageSize=10&status=Active",
+              "host": ["{{base_url}}"],
+              "path": ["subscriptions"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Active"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": 1,\n  \"plan\": \"Professional\",\n  \"amount\": 79,\n  \"billing_cycle\": \"Monthly\",\n  \"status\": \"Active\",\n  \"next_billing_date\": \"2024-02-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/subscriptions",
+              "host": ["{{base_url}}"],
+              "path": ["subscriptions"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Subscription",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Cancelled\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/subscriptions/1",
+              "host": ["{{base_url}}"],
+              "path": ["subscriptions", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Employees",
+      "item": [
+        {
+          "name": "Get All Employees",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/employees?page=1&pageSize=10&status=Active&department=Development",
+              "host": ["{{base_url}}"],
+              "path": ["employees"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Active"
+                },
+                {
+                  "key": "department",
+                  "value": "Development"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@Develo.com\",\n  \"role\": \"Developer\",\n  \"department_id\": 1,\n  \"status\": \"Active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/employees",
+              "host": ["{{base_url}}"],
+              "path": ["employees"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Attendance",
+      "item": [
+        {
+          "name": "Get All Attendance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/attendance?page=1&pageSize=10&date=2024-01-15&user_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["attendance"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "date",
+                  "value": "2024-01-15"
+                },
+                {
+                  "key": "user_id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Check In",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/attendance/check-in",
+              "host": ["{{base_url}}"],
+              "path": ["attendance", "check-in"]
+            }
+          }
+        },
+        {
+          "name": "Check Out",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/attendance/check-out",
+              "host": ["{{base_url}}"],
+              "path": ["attendance", "check-out"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Time Tracking",
+      "item": [
+        {
+          "name": "Get All Time Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/time-logs?page=1&pageSize=10&user_id=1&project_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["time-logs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "user_id",
+                  "value": "1"
+                },
+                {
+                  "key": "project_id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Time Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": 1,\n  \"project_id\": 1,\n  \"task_id\": 1,\n  \"hours\": 4.5,\n  \"date\": \"2024-01-15\",\n  \"description\": \"Implemented authentication module\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/time-logs",
+              "host": ["{{base_url}}"],
+              "path": ["time-logs"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "Get All Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/events?page=1&pageSize=10&start_date=2025-12-01&end_date=2025-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["events"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2025-12-01"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-12-31"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_name\": \"Team Meeting\",\n  \"label_color\": \"#FF0000\",\n  \"where\": \"Conference Room A\",\n  \"description\": \"Monthly team sync\",\n  \"starts_on_date\": \"2025-12-21\",\n  \"starts_on_time\": \"16:00\",\n  \"ends_on_date\": \"2025-12-21\",\n  \"ends_on_time\": \"17:00\",\n  \"departments\": [1],\n  \"select_employee\": [1, 2],\n  \"select_client\": [1],\n  \"host_id\": 1,\n  \"status\": \"Confirmed\",\n  \"event_link\": \"https://meet.example.com/abc123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/events",
+              "host": ["{{base_url}}"],
+              "path": ["events"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Departments",
+      "item": [
+        {
+          "name": "Get All Departments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/departments",
+              "host": ["{{base_url}}"],
+              "path": ["departments"]
+            }
+          }
+        },
+        {
+          "name": "Create Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Development\",\n  \"head_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/departments",
+              "host": ["{{base_url}}"],
+              "path": ["departments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tickets",
+      "item": [
+        {
+          "name": "Get All Tickets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tickets?page=1&pageSize=10&status=Open&priority=High",
+              "host": ["{{base_url}}"],
+              "path": ["tickets"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Open"
+                },
+                {
+                  "key": "priority",
+                  "value": "High"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Login Issue\",\n  \"client_id\": 1,\n  \"priority\": \"High\",\n  \"description\": \"Unable to login to the system\",\n  \"status\": \"Open\",\n  \"assigned_to_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tickets",
+              "host": ["{{base_url}}"],
+              "path": ["tickets"]
+            }
+          }
+        },
+        {
+          "name": "Add Ticket Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Issue resolved\",\n  \"file_path\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tickets/1/comments",
+              "host": ["{{base_url}}"],
+              "path": ["tickets", "1", "comments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users?page=1&pageSize=10&role=EMPLOYEE&status=Active",
+              "host": ["{{base_url}}"],
+              "path": ["users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                },
+                {
+                  "key": "role",
+                  "value": "EMPLOYEE"
+                },
+                {
+                  "key": "status",
+                  "value": "Active"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Employee\",\n  \"email\": \"john@Develo.com\",\n  \"password\": \"Employee@123\",\n  \"role\": \"EMPLOYEE\",\n  \"status\": \"Active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users",
+              "host": ["{{base_url}}"],
+              "path": ["users"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/users/1/reset-password",
+              "host": ["{{base_url}}"],
+              "path": ["users", "1", "reset-password"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Custom Fields",
+      "item": [
+        {
+          "name": "Get All Custom Fields",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/custom-fields?module=Leads",
+              "host": ["{{base_url}}"],
+              "path": ["custom-fields"],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "Leads"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Custom Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"lead_source_detail\",\n  \"label\": \"Lead Source Detail\",\n  \"type\": \"text\",\n  \"module\": \"Leads\",\n  \"required\": false,\n  \"options\": [],\n  \"default_value\": \"\",\n  \"placeholder\": \"Enter source details\",\n  \"help_text\": \"Additional details about the lead source\",\n  \"visibility\": [\"all\"],\n  \"enabled_in\": [\"create\", \"edit\", \"table\", \"filters\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/custom-fields",
+              "host": ["{{base_url}}"],
+              "path": ["custom-fields"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Get System Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settings",
+              "host": ["{{base_url}}"],
+              "path": ["settings"]
+            }
+          }
+        },
+        {
+          "name": "Update System Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"Develo CRM\",\n  \"currency\": \"USD\",\n  \"timezone\": \"UTC\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings",
+              "host": ["{{base_url}}"],
+              "path": ["settings"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+

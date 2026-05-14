@@ -1,0 +1,30 @@
+-- Social Media Integrations Table
+CREATE TABLE IF NOT EXISTS `social_media_integrations` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `company_id` INT UNSIGNED NOT NULL,
+  `platform` VARCHAR(50) NOT NULL COMMENT 'Facebook, Instagram, LinkedIn',
+  `name` VARCHAR(255) NOT NULL COMMENT 'Integration name',
+  `api_key` VARCHAR(500) NULL COMMENT 'Encrypted API key',
+  `api_secret` VARCHAR(500) NULL COMMENT 'Encrypted API secret',
+  `webhook_url` VARCHAR(500) NULL COMMENT 'Webhook URL for receiving leads',
+  `status` VARCHAR(50) DEFAULT 'Disconnected' COMMENT 'Connected, Disconnected',
+  `auto_create_lead` TINYINT(1) DEFAULT 1 COMMENT 'Auto create lead when form submitted',
+  `auto_assign_to` INT UNSIGNED NULL COMMENT 'User ID to auto assign leads',
+  `auto_email_template` VARCHAR(255) NULL COMMENT 'Email template to send',
+  `auto_task_template` VARCHAR(255) NULL COMMENT 'Task template to create',
+  `last_sync` TIMESTAMP NULL COMMENT 'Last synchronization time',
+  `leads_captured` INT DEFAULT 0 COMMENT 'Total leads captured',
+  `created_by` INT UNSIGNED NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_deleted` TINYINT(1) DEFAULT 0,
+  FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`auto_assign_to`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_social_integration_platform` (`platform`),
+  INDEX `idx_social_integration_company` (`company_id`),
+  INDEX `idx_social_integration_status` (`status`),
+  INDEX `idx_social_integration_deleted` (`is_deleted`),
+  UNIQUE KEY `unique_company_platform` (`company_id`, `platform`, `is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

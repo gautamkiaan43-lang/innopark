@@ -1,0 +1,4 @@
+INSERT INTO `email_templates` (`company_id`, `name`, `subject`, `body`, `type`) VALUES
+(1, 'Estimate Sent', 'Estimate #{ESTIMATE_NUMBER} from {COMPANY_NAME}', 'Dear {CLIENT_NAME},\n\nPlease find the attached estimate #{ESTIMATE_NUMBER} for {TOTAL_AMOUNT}.\n\nYou can view the estimate online here: {ESTIMATE_URL}\n\nWe look forward to your business.\n\nBest regards,\n{COMPANY_NAME}', 'estimate'),
+(1, 'Estimate Accepted', 'Estimate #{ESTIMATE_NUMBER} Accepted', 'Dear {CLIENT_NAME},\n\nThank you for accepting Estimate #{ESTIMATE_NUMBER}.\n\nWe will proceed with the next steps shortly.\n\nBest regards,\n{COMPANY_NAME}', 'estimate'),
+(1, 'Estimate Rejected', 'Estimate #{ESTIMATE_NUMBER} Rejected', 'Dear {CLIENT_NAME},\n\nWe received your notification regarding Estimate #{ESTIMATE_NUMBER}.\n\nIf you have any questions or feedback, please let us know.\n\nBest regards,\n{COMPANY_NAME}', 'estimate');
