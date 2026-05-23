@@ -23,6 +23,12 @@ const migrationService = {
             // 4. Ensure activities has entity_type and entity_id columns
             await migrationService.ensureEntityColumnsForActivities();
 
+            // 5. Ensure lead conversion schema is aligned
+            await migrationService.ensureLeadConversionSchema();
+
+            // 6. Ensure custom sections schema is aligned
+            await migrationService.ensureCustomSectionsSchema();
+
             console.log('✅ Auto-migrations completed successfully!');
         } catch (error) {
             console.error('❌ Migration error:', error.message);
@@ -117,6 +123,104 @@ const migrationService = {
             }
         } catch (error) {
             console.warn(`⚠️ Could not ensure entity columns for activities: ${error.message}`);
+        }
+    },
+
+    ensureLeadConversionSchema: async () => {
+        try {
+            console.log('🛠️ Ensuring lead conversion schema is aligned...');
+            
+            // 1. Leads table: Check/Add columns
+            const [leadColumns] = await pool.execute(`SHOW COLUMNS FROM leads`);
+            const leadColumnNames = leadColumns.map(c => c.Field.toLowerCase());
+            
+            if (!leadColumnNames.includes('name')) {
+                console.log('🛠️ Adding leads.name column...');
+                await pool.execute(`ALTER TABLE leads ADD COLUMN name VARCHAR(255) NULL AFTER id`);
+            }
+            if (!leadColumnNames.includes('assigned_to')) {
+                console.log('🛠️ Adding leads.assigned_to column...');
+                await pool.execute(`ALTER TABLE leads ADD COLUMN assigned_to INT UNSIGNED NULL AFTER owner_id`);
+            }
+            
+            // Modify leads.status ENUM to include 'converted'
+            console.log('🛠️ Modifying leads.status to support converted status...');
+            await pool.execute(`ALTER TABLE leads MODIFY COLUMN status ENUM('New','Qualified','Discussion','Negotiation','Won','Lost','converted') DEFAULT 'New'`);
+            
+            // Sync leads data
+            await pool.execute(`UPDATE leads SET name = person_name WHERE name IS NULL AND person_name IS NOT NULL`);
+            await pool.execute(`UPDATE leads SET assigned_to = owner_id WHERE assigned_to IS NULL AND owner_id IS NOT NULL`);
+
+            // 2. Companies table: Check/Add company_name
+            const [companyColumns] = await pool.execute(`SHOW COLUMNS FROM companies`);
+            const companyColumnNames = companyColumns.map(c => c.Field.toLowerCase());
+            
+            if (!companyColumnNames.includes('company_name')) {
+                console.log('🛠️ Adding companies.company_name column...');
+                await pool.execute(`ALTER TABLE companies ADD COLUMN company_name VARCHAR(255) NULL AFTER name`);
+            }
+            await pool.execute(`UPDATE companies SET company_name = name WHERE company_name IS NULL AND name IS NOT NULL`);
+
+            // 3. Deals table: Check/Add stage and value
+            const [dealColumns] = await pool.execute(`SHOW COLUMNS FROM deals`);
+            const dealColumnNames = dealColumns.map(c => c.Field.toLowerCase());
+            
+            if (!dealColumnNames.includes('stage')) {
+                console.log('🛠️ Adding deals.stage column...');
+                await pool.execute(`ALTER TABLE deals ADD COLUMN stage VARCHAR(50) NULL DEFAULT 'New' AFTER stage_id`);
+            }
+            if (!dealColumnNames.includes('value')) {
+                console.log('🛠️ Adding deals.value column...');
+                await pool.execute(`ALTER TABLE deals ADD COLUMN value DECIMAL(15,2) NULL DEFAULT 0.00 AFTER stage`);
+            }
+            await pool.execute(`UPDATE deals SET stage = 'New' WHERE stage IS NULL`);
+            await pool.execute(`UPDATE deals SET value = total WHERE value IS NULL OR value = 0.00`);
+            
+            console.log('✅ Lead conversion schema aligned successfully!');
+        } catch (error) {
+            console.error('❌ Lead conversion schema alignment error:', error.message);
+        }
+    },
+
+    ensureCustomSectionsSchema: async () => {
+        try {
+            console.log('🛠️ Ensuring custom sections schema is aligned...');
+            
+            // 1. Create custom_sections table if it doesn't exist
+            await pool.execute(`
+                CREATE TABLE IF NOT EXISTS custom_sections (
+                    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    company_id INT UNSIGNED NOT NULL DEFAULT 1,
+                    module_name VARCHAR(50) NOT NULL,
+                    section_name VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            
+            // 2. Add section_id to custom_fields table if it doesn't exist
+            const [columns] = await pool.execute(`SHOW COLUMNS FROM custom_fields`);
+            const columnNames = columns.map(c => c.Field.toLowerCase());
+            
+            if (!columnNames.includes('section_id')) {
+                console.log('🛠️ Adding custom_fields.section_id column...');
+                await pool.execute(`ALTER TABLE custom_fields ADD COLUMN section_id INT UNSIGNED NULL AFTER company_id`);
+                
+                // Add foreign key constraint
+                try {
+                    await pool.execute(`
+                        ALTER TABLE custom_fields 
+                        ADD CONSTRAINT fk_custom_fields_section 
+                        FOREIGN KEY (section_id) REFERENCES custom_sections(id) ON DELETE SET NULL
+                    `);
+                } catch (fkError) {
+                    console.warn(`⚠️ Could not add foreign key constraint on section_id: ${fkError.message}`);
+                }
+            }
+            
+            console.log('✅ Custom sections schema aligned successfully!');
+        } catch (error) {
+            console.error('❌ Custom sections schema alignment error:', error.message);
         }
     }
 };

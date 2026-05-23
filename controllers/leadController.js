@@ -119,7 +119,7 @@ const sanitizeInteger = (intValue) => {
  * GET /api/v1/leads
  */
 // Helper to replace nulls with empty strings/zeros
-const LEAD_STATUS_ALLOWED = ['New', 'Qualified', 'Discussion', 'Negotiation', 'Won', 'Lost'];
+const LEAD_STATUS_ALLOWED = ['New', 'Qualified', 'Discussion', 'Negotiation', 'Won', 'Lost', 'converted', 'Converted'];
 const normalizeLeadStatus = (status) => {
   if (!status || typeof status !== 'string') return 'New';
   const s = String(status).trim();
@@ -146,9 +146,35 @@ const normalizeLeadStatus = (status) => {
 const sanitizeLead = (lead) => {
   const sanitized = { ...lead };
   // String fields
-  ['company_name', 'person_name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'country', 'notes'].forEach(field => {
+  ['company_name', 'person_name', 'email', 'phone', 'city', 'state', 'zip', 'country', 'notes'].forEach(field => {
     if (sanitized[field] === null) sanitized[field] = '';
   });
+
+  // Handle address parsing
+  if (sanitized.address) {
+    try {
+      sanitized.address = JSON.parse(sanitized.address);
+    } catch (e) {
+      sanitized.address = {
+        street: sanitized.address,
+        houseNumber: '',
+        postalCode: sanitized.zip || '',
+        city: sanitized.city || '',
+        state: sanitized.state || '',
+        country: sanitized.country || ''
+      };
+    }
+  } else {
+    sanitized.address = {
+      street: '',
+      houseNumber: '',
+      postalCode: '',
+      city: '',
+      state: '',
+      country: ''
+    };
+  }
+
   // Numeric/Date fields (keep dates null if really no date? User complained about nulls generally)
   // Let's keep dates as null if empty, but probability/value as 0
   if (sanitized.value === null) sanitized.value = '0.00';
@@ -440,6 +466,21 @@ const create = async (req, res) => {
     // Only validate owner_id if provided, otherwise use default
     const effectiveOwnerId = sanitizedOwnerId || req.userId || 1;
 
+    // Parse/serialize address details
+    let dbAddress = address;
+    let dbCity = city;
+    let dbState = state;
+    let dbZip = zip;
+    let dbCountry = country;
+
+    if (address && typeof address === 'object') {
+      dbAddress = JSON.stringify(address);
+      dbCity = address.city || city || null;
+      dbState = address.state || state || null;
+      dbZip = address.postalCode || zip || null;
+      dbCountry = address.country || country || null;
+    }
+
     // Insert lead - convert undefined to null for SQL
     const companyId = req.companyId || req.body.company_id || req.query.company_id || 1;
     // Get created_by from user session, body, query, or use owner_id as fallback
@@ -461,11 +502,11 @@ const create = async (req, res) => {
         effectiveOwnerId,
         normalizeLeadStatus(status),
         source ?? null,
-        address ?? null,
-        city ?? null,
-        state ?? null,
-        zip ?? null,
-        country ?? null,
+        dbAddress ?? null,
+        dbCity ?? null,
+        dbState ?? null,
+        dbZip ?? null,
+        dbCountry ?? null,
         sanitizedValue,
         convertToMySQLDate(due_followup),
         notes ?? null,
@@ -568,6 +609,16 @@ const update = async (req, res) => {
     const updateFields = req.body;
 
     const companyId = req.companyId || req.query.company_id || req.body.company_id || 1;
+
+    // Parse/serialize address details if present as an object
+    if (updateFields.hasOwnProperty('address') && typeof updateFields.address === 'object' && updateFields.address !== null) {
+      const addrObj = updateFields.address;
+      updateFields.address = JSON.stringify(addrObj);
+      updateFields.city = addrObj.city || updateFields.city || null;
+      updateFields.state = addrObj.state || updateFields.state || null;
+      updateFields.zip = addrObj.postalCode || updateFields.zip || null;
+      updateFields.country = addrObj.country || updateFields.country || null;
+    }
 
     // Pre-process and sanitize updateFields BEFORE building query
     // Convert due_followup date format if present
@@ -1828,10 +1879,38 @@ const updateStage = async (req, res) => {
   try {
     const { id } = req.params;
     const { stage_id, pipeline_id } = req.body;
+    const userId = req.user?.id || req.userId || 1;
 
     if (!stage_id) {
       return res.status(400).json({ success: false, error: req.t ? req.t('api_msg_9dc48842') : "stage_id is required" });
     }
+
+    // 1. Get current lead stage details to record in history
+    const [leads] = await pool.execute('SELECT stage_id, status FROM leads WHERE id = ?', [id]);
+    if (leads.length === 0) {
+      return res.status(404).json({ success: false, error: req.t ? req.t('api_msg_27feb92d') : "Lead not found" });
+    }
+    const old_stage_id = leads[0].stage_id;
+    const old_status = leads[0].status;
+
+    // 2. Fetch the stage names
+    let oldStageName = old_status || 'Unknown';
+    if (old_stage_id) {
+      const [oldStageRows] = await pool.execute(
+        'SELECT name COLLATE utf8mb4_unicode_ci AS name FROM lead_pipeline_stages WHERE id = ? UNION SELECT name COLLATE utf8mb4_unicode_ci AS name FROM lead_stages WHERE id = ?', 
+        [old_stage_id, old_stage_id]
+      );
+      if (oldStageRows.length > 0) oldStageName = oldStageRows[0].name;
+    }
+
+    const [newStageRows] = await pool.execute(
+      'SELECT name COLLATE utf8mb4_unicode_ci AS name, color COLLATE utf8mb4_unicode_ci AS color FROM lead_pipeline_stages WHERE id = ? UNION SELECT name COLLATE utf8mb4_unicode_ci AS name, color COLLATE utf8mb4_unicode_ci AS color FROM lead_stages WHERE id = ?', 
+      [stage_id, stage_id]
+    );
+    if (newStageRows.length === 0) {
+      return res.status(400).json({ success: false, error: "Invalid stage_id" });
+    }
+    const newStageName = newStageRows[0].name;
 
     const updates = ['stage_id = ?'];
     const values = [stage_id];
@@ -1841,13 +1920,10 @@ const updateStage = async (req, res) => {
       values.push(pipeline_id);
     }
 
-    // Also update legacy status field if needed
-    // Fetch stage name
-    const [stages] = await pool.execute('SELECT name FROM lead_pipeline_stages WHERE id = ?', [stage_id]);
-    if (stages.length > 0) {
-      updates.push('status = ?');
-      values.push(normalizeLeadStatus(stages[0].name));
-    }
+    // Normalize legacy status field
+    const normalizedStatus = normalizeLeadStatus(newStageName);
+    updates.push('status = ?');
+    values.push(normalizedStatus);
 
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(id);
@@ -1861,10 +1937,295 @@ const updateStage = async (req, res) => {
       return res.status(404).json({ success: false, error: req.t ? req.t('api_msg_27feb92d') : "Lead not found" });
     }
 
-    res.json({ success: true, message: req.t ? req.t('api_msg_bbee6a9c') : "Lead stage updated successfully" });
+    // 3. Save to stage_history
+    await pool.execute(
+      'INSERT INTO stage_history (entity_type, entity_id, old_stage_id, new_stage_id, changed_by) VALUES (?, ?, ?, ?, ?)',
+      ['lead', id, old_stage_id || null, stage_id, userId]
+    );
+
+    // 4. Get current user's name
+    const [users] = await pool.execute('SELECT name FROM users WHERE id = ?', [userId]);
+    const userName = users.length > 0 ? users[0].name : 'System';
+
+    // 5. Save activity timeline entry
+    const description = `${userName} changed stage to ${newStageName}`;
+    const activityTitle = `Stage changed: ${oldStageName} → ${newStageName}`;
+    
+    await pool.execute(
+      `INSERT INTO activities (
+        type, title, description, reference_type, reference_id, 
+        entity_type, entity_id, lead_id, created_by, assigned_to
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['comment', activityTitle, description, 'lead', id, 'lead', id, id, userId, userId]
+    );
+
+    res.json({ 
+      success: true, 
+      message: req.t ? req.t('api_msg_bbee6a9c') : "Lead stage updated successfully",
+      stage_name: newStageName,
+      status: normalizedStatus
+    });
   } catch (error) {
     console.error('Update lead stage error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const convertLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { createContact = true, createCompany = true, createDeal = true } = req.body;
+    const companyIdFromToken = req.companyId || req.query.company_id || req.body.company_id || 1;
+
+    // Fetch the lead
+    const [leads] = await pool.execute(
+      `SELECT * FROM leads WHERE id = ? AND company_id = ? AND is_deleted = 0`,
+      [id, companyIdFromToken]
+    );
+
+    if (leads.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: req.t ? req.t('api_msg_27feb92d') : "Lead not found"
+      });
+    }
+
+    const lead = leads[0];
+
+    // Check if already converted
+    if (lead.status === 'converted' || lead.status === 'Converted') {
+      return res.status(400).json({
+        success: false,
+        error: req.t ? req.t('api_msg_lead_already_converted') : "Lead already converted"
+      });
+    }
+
+    const conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    try {
+      let companyId = null;
+      let clientId = null;
+      let contactId = null;
+      let dealId = null;
+
+      // 1. Company Handling (STEP 7)
+      if (lead.company_name && lead.company_name.trim() !== '') {
+        // Backend check: SELECT * FROM companies WHERE company_name = lead.company_name
+        const [existingCompanies] = await conn.execute(
+          `SELECT * FROM companies WHERE company_name = ? LIMIT 1`,
+          [lead.company_name.trim()]
+        );
+
+        if (existingCompanies.length > 0) {
+          // Reuse existing company
+          companyId = existingCompanies[0].id;
+          
+          // Check if clients (CRM Customer Organization) record exists for this company
+          const [existingClients] = await conn.execute(
+            `SELECT id FROM clients WHERE company_name = ? AND company_id = ? AND is_deleted = 0 LIMIT 1`,
+            [lead.company_name.trim(), lead.company_id]
+          );
+          if (existingClients.length > 0) {
+            clientId = existingClients[0].id;
+          } else {
+            // Create client mapping for CRM
+            const [clientResult] = await conn.execute(
+              `INSERT INTO clients (company_name, email, phone_number, address, city, state, country, status, company_id, owner_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [lead.company_name.trim(), lead.email, lead.phone, lead.address, lead.city, lead.state, lead.country || 'United States', 'Active', lead.company_id, lead.owner_id || 1]
+            );
+            clientId = clientResult.insertId;
+          }
+        } else if (createCompany) {
+          // Create new company and new client only if createCompany is true
+          const [compResult] = await conn.execute(
+            `INSERT INTO companies (name, company_name, email, phone, address, city, state, country)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [lead.company_name.trim(), lead.company_name.trim(), lead.email, lead.phone, lead.address, lead.city, lead.state, lead.country || 'United States']
+          );
+          companyId = compResult.insertId;
+
+          const [clientResult] = await conn.execute(
+            `INSERT INTO clients (company_name, email, phone_number, address, city, state, country, status, company_id, owner_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [lead.company_name.trim(), lead.email, lead.phone, lead.address, lead.city, lead.state, lead.country || 'United States', 'Active', lead.company_id, lead.owner_id || 1]
+          );
+          clientId = clientResult.insertId;
+        }
+      }
+
+      // 2. Contact Handling (STEP 8)
+      if (createContact) {
+        const [contactResult] = await conn.execute(
+          `INSERT INTO contacts (
+            company_id, client_id, lead_id, name, company, email, phone,
+            address, city, state, country, assigned_user_id, status, is_primary
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            lead.company_id,
+            clientId,
+            lead.id,
+            lead.person_name || lead.name || 'Unnamed Contact',
+            lead.company_name || null,
+            lead.email || null,
+            lead.phone || null,
+            lead.address || null,
+            lead.city || null,
+            lead.state || null,
+            lead.country || null,
+            lead.owner_id || null,
+            'Active',
+            1
+          ]
+        );
+        contactId = contactResult.insertId;
+      }
+
+      // 3. Deal Handling (STEP 9 & 10)
+      if (createDeal) {
+        // Fetch default pipeline stage
+        const [defPipe] = await conn.execute(
+          `SELECT id FROM deal_pipelines WHERE company_id = ? AND is_default = 1 LIMIT 1`,
+          [lead.company_id]
+        );
+        let pipelineId = defPipe.length > 0 ? defPipe[0].id : null;
+        if (!pipelineId) {
+          const [anyPipe] = await conn.execute(
+            `SELECT id FROM deal_pipelines WHERE company_id = ? AND is_deleted = 0 LIMIT 1`,
+            [lead.company_id]
+          );
+          if (anyPipe.length > 0) pipelineId = anyPipe[0].id;
+        }
+
+        let stageId = null;
+        if (pipelineId) {
+          const [defStage] = await conn.execute(
+            `SELECT id FROM deal_pipeline_stages WHERE pipeline_id = ? AND is_default = 1 LIMIT 1`,
+            [pipelineId]
+          );
+          if (defStage.length > 0) {
+            stageId = defStage[0].id;
+          } else {
+            const [firstStage] = await conn.execute(
+              `SELECT id FROM deal_pipeline_stages WHERE pipeline_id = ? AND is_deleted = 0 ORDER BY display_order ASC LIMIT 1`,
+              [pipelineId]
+            );
+            if (firstStage.length > 0) stageId = firstStage[0].id;
+          }
+        }
+
+        // Generate deal number
+        const [dealNumRows] = await conn.execute(
+          `SELECT deal_number FROM deals WHERE deal_number LIKE 'DEAL#%' ORDER BY LENGTH(deal_number) DESC, deal_number DESC LIMIT 1`
+        );
+        let nextNum = 1;
+        if (dealNumRows.length > 0 && dealNumRows[0].deal_number) {
+          const numMatch = dealNumRows[0].deal_number.match(/DEAL#(\d+)/);
+          if (numMatch && numMatch[1]) {
+            nextNum = parseInt(numMatch[1], 10) + 1;
+          }
+        }
+        const dealNumber = `DEAL#${String(nextNum).padStart(3, '0')}`;
+
+        // Insert deal
+        const [dealResult] = await conn.execute(
+          `INSERT INTO deals (
+            company_id, client_id, contact_id, lead_id, deal_number, title, stage, stage_id, pipeline_id,
+            value, total, sub_total, currency, assigned_to, created_by, status, deal_date, valid_till
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+          [
+            lead.company_id,
+            clientId,
+            contactId,
+            lead.id,
+            dealNumber,
+            `${lead.person_name || lead.name || 'Unnamed Lead'} Deal`,
+            'New',
+            stageId,
+            pipelineId,
+            lead.value || 0,
+            lead.value || 0,
+            lead.value || 0,
+            lead.currency || 'USD',
+            lead.owner_id || 1,
+            req.userId || 1,
+            'Draft',
+            new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          ]
+        );
+        dealId = dealResult.insertId;
+
+        // Link in deal_contacts
+        if (contactId) {
+          await conn.execute(
+            `INSERT INTO deal_contacts (deal_id, contact_id, is_primary) VALUES (?, ?, ?)`,
+            [dealId, contactId, 1]
+          );
+        }
+      }
+
+      // 4. Update Lead Status (STEP 11)
+      await conn.execute(
+        `UPDATE leads SET status = 'converted', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [lead.id]
+      );
+
+      // 5. Activity Log (STEP 13)
+      const entitiesCreated = [];
+      if (createContact) entitiesCreated.push('Contact');
+      if (createCompany && lead.company_name) entitiesCreated.push('Company');
+      if (createDeal) entitiesCreated.push('Deal');
+      const logText = `Lead converted to ${entitiesCreated.join(' + ')}`;
+
+      await conn.execute(
+        `INSERT INTO activities (
+          type, description, reference_type, reference_id, entity_type, entity_id,
+          company_id, lead_id, contact_id, deal_id, created_by, assigned_to
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          'System',
+          logText,
+          'lead',
+          lead.id,
+          'lead',
+          lead.id,
+          lead.company_id,
+          lead.id,
+          contactId,
+          dealId,
+          req.userId || 1,
+          lead.owner_id || 1
+        ]
+      );
+
+      await conn.commit();
+      conn.release();
+
+      return res.json({
+        success: true,
+        message: "Lead converted successfully",
+        data: {
+          contactId,
+          companyId,
+          clientId,
+          dealId
+        }
+      });
+
+    } catch (txError) {
+      await conn.rollback();
+      conn.release();
+      throw txError;
+    }
+
+  } catch (error) {
+    console.error('Lead conversion error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to convert lead"
+    });
   }
 };
 
@@ -1888,5 +2249,6 @@ module.exports = {
   updateContact,
   deleteContact,
   importLeads,
+  convertLead,
 };
 

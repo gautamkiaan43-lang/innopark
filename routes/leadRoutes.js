@@ -45,6 +45,7 @@ router.post('/import', leadController.importLeads);
 // More specific routes should come before less specific ones
 router.put('/:id/update-status', leadController.updateStatus);
 router.put('/:id/labels', leadController.updateLeadLabels);
+router.post('/:id/convert', leadController.convertLead);
 router.get('/', leadController.getAll);
 router.get('/:id', leadController.getById);
 router.post('/', leadController.create);

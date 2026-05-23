@@ -69,7 +69,7 @@ const create = async (req, res) => {
         }
 
         // Validate entity_type
-        const validEntityTypes = ['lead', 'contact', 'company', 'deal'];
+        const validEntityTypes = ['lead', 'contact', 'company', 'deal', 'project'];
         if (!validEntityTypes.includes(entity_type)) {
             return res.status(400).json({
                 success: false,
@@ -159,7 +159,7 @@ const createWithExtras = async (req, res) => {
             }
         }
 
-        const validEntityTypes = ['lead', 'contact', 'company', 'deal'];
+        const validEntityTypes = ['lead', 'contact', 'company', 'deal', 'project'];
         if (!validEntityTypes.includes(entity_type)) {
             return res.status(400).json({ success: false, error: `Invalid entity type: ${entity_type}. Allowed: ${validEntityTypes.join(', ')}` });
         }

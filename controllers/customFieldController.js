@@ -156,7 +156,7 @@ const create = async (req, res) => {
     try {
         const {
             name, label, type, module, required, placeholder, help_text,
-            options, visibility, enabled_in
+            options, visibility, enabled_in, section_id
         } = req.body;
 
         const companyId = req.companyId || req.body.company_id;
@@ -175,10 +175,11 @@ const create = async (req, res) => {
 
         // Insert into custom_fields - convert undefined to null for SQL
         const [result] = await connection.execute(
-            `INSERT INTO custom_fields (company_id, name, label, type, module, required, placeholder, help_text)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO custom_fields (company_id, section_id, name, label, type, module, required, placeholder, help_text)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 companyId,
+                section_id ? parseInt(section_id) : null,
                 finalName,
                 label,
                 type,
@@ -257,7 +258,7 @@ const update = async (req, res) => {
         const { id } = req.params;
         const {
             label, type, module, required, placeholder, help_text,
-            options, visibility, enabled_in
+            options, visibility, enabled_in, section_id
         } = req.body;
 
         const companyId = req.companyId || req.body.company_id;
@@ -277,9 +278,18 @@ const update = async (req, res) => {
         // Update main table
         await connection.execute(
             `UPDATE custom_fields 
-             SET label = ?, type = ?, module = ?, required = ?, placeholder = ?, help_text = ?
+             SET section_id = ?, label = ?, type = ?, module = ?, required = ?, placeholder = ?, help_text = ?
              WHERE id = ?`,
-            [label, type, module, required ? 1 : 0, placeholder, help_text, id]
+            [
+                section_id ? parseInt(section_id) : null,
+                label,
+                type,
+                module,
+                required ? 1 : 0,
+                placeholder || null,
+                help_text || null,
+                id
+            ]
         );
 
         // Update Options

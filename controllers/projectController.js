@@ -427,10 +427,10 @@ const generateShortCode = async (companyId) => {
 const create = async (req, res) => {
   try {
     const {
-      company_id, short_code, project_name, description, start_date, deadline, no_deadline,
+      company_id, short_code, project_name, title, description, start_date, deadline, no_deadline,
       budget, project_category, project_sub_category, department_id, client_id,
       project_manager_id, project_summary, notes, public_gantt_chart, public_task_board,
-      task_approval, label, project_members = [], status, progress, price, custom_fields = {}
+      task_approval, label, project_members = [], status, progress, price, priority, custom_fields = {}
     } = req.body;
 
     // Validate company_id is required
@@ -441,8 +441,8 @@ const create = async (req, res) => {
       });
     }
 
-    // Validate project_name is required
-    if (!project_name || !project_name.trim()) {
+    const finalProjectName = (project_name || title || '').trim();
+    if (!finalProjectName) {
       return res.status(400).json({
         success: false,
         error: req.t ? req.t('api_msg_d8aa73ce') : "project_name is required"
@@ -501,22 +501,31 @@ const create = async (req, res) => {
     // Insert project
     const [result] = await pool.execute(
       `INSERT INTO projects (
-        company_id, short_code, project_name, description, start_date, deadline, no_deadline,
+        company_id, short_code, project_name, title, description, start_date, deadline, no_deadline,
         budget, project_category, project_sub_category, department_id, client_id,
         project_manager_id, project_summary, notes, public_gantt_chart, public_task_board,
-        task_approval, label, status, progress, created_by, price
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        task_approval, label, status, priority, progress, created_by, price
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        company_id ?? null, projectShortCode, project_name || null, description || null, projectStartDate, deadlineValue,
+        company_id ?? null, projectShortCode, finalProjectName, finalProjectName, description || null, projectStartDate, deadlineValue,
         no_deadline || 0, budget || null, project_category || null, project_sub_category || null,
         department_id || null, validClientId || null, validManagerId || null, project_summary || null, notes || null,
         public_gantt_chart || 'enable', public_task_board || 'enable',
-        task_approval || 'disable', label || null, statusValue,
+        task_approval || 'disable', label || null, statusValue, priority || 'Medium',
         progress || 0, createdByUserId || req.userId || req.user?.id || validManagerId || 1, price || budget || 0
       ]
     );
 
     const projectId = result.insertId;
+
+    // Log Creation activity
+    const creatorName = req.user?.name || 'Admin';
+    const creatorId = req.user?.id || 1;
+    await pool.execute(
+      `INSERT INTO activities (type, description, reference_type, reference_id, entity_type, entity_id, created_by, is_completed)
+       VALUES ('task', ?, 'project', ?, 'project', ?, ?, 1)`,
+      [`${creatorName} created project: ${finalProjectName}`, projectId, projectId, creatorId]
+    );
 
     // Insert members
     if (project_members.length > 0) {
@@ -571,29 +580,44 @@ const update = async (req, res) => {
     const { id } = req.params;
     const updateFields = req.body;
 
-    // Check if project exists
-    const [projects] = await pool.execute(
-      `SELECT id FROM projects WHERE id = ? AND is_deleted = 0`,
+    // Check if project exists and get old values for activity logging
+    const [oldProjects] = await pool.execute(
+      `SELECT p.id, p.project_name, p.status, p.deadline, p.project_manager_id,
+              pm_user.name as project_manager_name
+       FROM projects p
+       LEFT JOIN users pm_user ON p.project_manager_id = pm_user.id
+       WHERE p.id = ? AND p.is_deleted = 0`,
       [id]
     );
 
-    if (projects.length === 0) {
+    if (oldProjects.length === 0) {
       return res.status(404).json({
         success: false,
         error: req.t ? req.t('api_msg_1badba1e') : "Project not found"
       });
     }
 
+    const oldProject = oldProjects[0];
+    const updaterName = req.user?.name || 'Admin';
+    const updaterId = req.user?.id || 1;
+
     // Build update query
     const allowedFields = [
-      'company_id', 'project_name', 'description', 'start_date', 'deadline', 'no_deadline',
+      'company_id', 'project_name', 'title', 'description', 'start_date', 'deadline', 'no_deadline',
       'budget', 'project_category', 'project_sub_category', 'department_id', 'client_id',
       'project_manager_id', 'project_summary', 'notes', 'public_gantt_chart', 'public_task_board',
-      'task_approval', 'label', 'status', 'progress', 'price'
+      'task_approval', 'label', 'status', 'priority', 'progress', 'price'
     ];
 
     const updates = [];
     const values = [];
+
+    // Ensure title/project_name synchronization on updates
+    let finalTitle = updateFields.title || updateFields.project_name;
+    if (finalTitle !== undefined) {
+      updateFields.title = finalTitle;
+      updateFields.project_name = finalTitle;
+    }
 
     for (const field of allowedFields) {
       if (updateFields.hasOwnProperty(field)) {
@@ -620,9 +644,50 @@ const update = async (req, res) => {
       // If no fields to update, still return success
       return res.json({
         success: true,
-        data: projects[0],
+        data: oldProject,
         message: req.t ? req.t('api_msg_b9c02310') : "Project updated successfully"
       });
+    }
+
+    // Log timeline activities
+    if (updateFields.hasOwnProperty('status') && updateFields.status !== undefined) {
+      const newStatus = normalizeProjectStatus(updateFields.status);
+      const oldStatus = normalizeProjectStatus(oldProject.status);
+      if (newStatus !== oldStatus) {
+        await pool.execute(
+          `INSERT INTO activities (type, description, reference_type, reference_id, entity_type, entity_id, created_by, is_completed)
+           VALUES ('note', ?, 'project', ?, 'project', ?, ?, 1)`,
+          [`${updaterName} updated project status to ${updateFields.status}`, id, id, updaterId]
+        );
+      }
+    }
+
+    if (updateFields.hasOwnProperty('deadline') && updateFields.deadline !== undefined) {
+      const oldD = oldProject.deadline ? new Date(oldProject.deadline).toISOString().split('T')[0] : 'None';
+      const newD = updateFields.deadline ? new Date(updateFields.deadline).toISOString().split('T')[0] : 'None';
+      if (oldD !== newD) {
+        await pool.execute(
+          `INSERT INTO activities (type, description, reference_type, reference_id, entity_type, entity_id, created_by, is_completed)
+           VALUES ('note', ?, 'project', ?, 'project', ?, ?, 1)`,
+          [`${updaterName} changed deadline from ${oldD} to ${newD}`, id, id, updaterId]
+        );
+      }
+    }
+
+    if (updateFields.hasOwnProperty('project_manager_id') && updateFields.project_manager_id !== undefined) {
+      if (parseInt(updateFields.project_manager_id) !== parseInt(oldProject.project_manager_id)) {
+        const newManagerId = updateFields.project_manager_id;
+        let newManagerName = 'None';
+        if (newManagerId) {
+          const [users] = await pool.execute('SELECT name FROM users WHERE id = ?', [newManagerId]);
+          if (users.length > 0) newManagerName = users[0].name;
+        }
+        await pool.execute(
+          `INSERT INTO activities (type, description, reference_type, reference_id, entity_type, entity_id, created_by, is_completed)
+           VALUES ('note', ?, 'project', ?, 'project', ?, ?, 1)`,
+          [`${updaterName} assigned ${newManagerName} as project manager`, id, id, updaterId]
+        );
+      }
     }
 
     // Update members if provided

@@ -592,17 +592,60 @@ const updateStage = async (req, res) => {
     try {
         const { id } = req.params;
         const { stage_id, pipeline_id } = req.body;
+        const userId = req.user?.id || req.userId || 1;
 
         if (!stage_id) {
             return res.status(400).json({ success: false, error: req.t ? req.t('api_msg_9dc48842') : "stage_id is required" });
         }
 
+        // 1. Get current deal stage details
+        const [deals] = await pool.execute('SELECT stage_id, status FROM deals WHERE id = ?', [id]);
+        if (deals.length === 0) {
+            return res.status(404).json({ success: false, error: req.t ? req.t('api_msg_f85a8ec8') : "Deal not found" });
+        }
+        const old_stage_id = deals[0].stage_id;
+        const old_status = deals[0].status;
+
+        // 2. Fetch stage names
+        let oldStageName = old_status || 'Unknown';
+        if (old_stage_id) {
+            const [oldStageRows] = await pool.execute(
+                'SELECT name COLLATE utf8mb4_unicode_ci AS name FROM deal_pipeline_stages WHERE id = ? UNION SELECT name COLLATE utf8mb4_unicode_ci AS name FROM deal_stages WHERE id = ?', 
+                [old_stage_id, old_stage_id]
+            );
+            if (oldStageRows.length > 0) oldStageName = oldStageRows[0].name;
+        }
+
+        const [newStageRows] = await pool.execute(
+            'SELECT name COLLATE utf8mb4_unicode_ci AS name, color COLLATE utf8mb4_unicode_ci AS color FROM deal_pipeline_stages WHERE id = ? UNION SELECT name COLLATE utf8mb4_unicode_ci AS name, color COLLATE utf8mb4_unicode_ci AS color FROM deal_stages WHERE id = ?', 
+            [stage_id, stage_id]
+        );
+        if (newStageRows.length === 0) {
+            return res.status(400).json({ success: false, error: "Invalid stage_id" });
+        }
+        const newStageName = newStageRows[0].name;
+
+        // 3. Update database
         const updates = ['stage_id = ?'];
         const values = [stage_id];
 
         if (pipeline_id) {
             updates.push('pipeline_id = ?');
             values.push(pipeline_id);
+        }
+
+        // Auto Won/Lost logic!
+        let newStatus = old_status;
+        if (newStageName.toLowerCase() === 'won' || newStageName.toLowerCase() === 'gewonnen') {
+            updates.push("status = 'Won'");
+            newStatus = 'Won';
+        } else if (newStageName.toLowerCase() === 'lost' || newStageName.toLowerCase() === 'verloren') {
+            updates.push("status = 'Lost'");
+            newStatus = 'Lost';
+        } else {
+            updates.push("status = ?");
+            newStatus = newStageName;
+            values.push(newStageName);
         }
 
         updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -617,7 +660,35 @@ const updateStage = async (req, res) => {
             return res.status(404).json({ success: false, error: req.t ? req.t('api_msg_f85a8ec8') : "Deal not found" });
         }
 
-        res.json({ success: true, message: req.t ? req.t('api_msg_0189282e') : "Deal stage updated successfully" });
+        // 4. Save history to stage_history
+        await pool.execute(
+            'INSERT INTO stage_history (entity_type, entity_id, old_stage_id, new_stage_id, changed_by) VALUES (?, ?, ?, ?, ?)',
+            ['deal', id, old_stage_id || null, stage_id, userId]
+        );
+
+        // 5. Get current user's name
+        const [users] = await pool.execute('SELECT name FROM users WHERE id = ?', [userId]);
+        const userName = users.length > 0 ? users[0].name : 'System';
+
+        // 6. Save activity timeline entry
+        const description = `${userName} changed stage to ${newStageName}`;
+        const activityTitle = `Stage changed: ${oldStageName} → ${newStageName}`;
+
+        await pool.execute(
+            `INSERT INTO activities (
+                type, title, description, reference_type, reference_id, 
+                entity_type, entity_id, deal_id, created_by, assigned_to
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ['comment', activityTitle, description, 'deal', id, 'deal', id, id, userId, userId]
+        );
+
+        res.json({ 
+            success: true, 
+            message: req.t ? req.t('api_msg_0189282e') : "Deal stage updated successfully",
+            stage_name: newStageName,
+            status: newStatus
+        });
     } catch (error) {
         console.error('Update deal stage error:', error);
         res.status(500).json({ success: false, error: error.message });

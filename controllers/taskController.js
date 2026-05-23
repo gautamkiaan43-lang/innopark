@@ -123,8 +123,8 @@ const getAll = async (req, res) => {
       params.push(category);
     }
     if (project_id) {
-      query += ' AND t.project_id = ?';
-      params.push(project_id);
+      query += ' AND (t.project_id = ? OR (t.related_to_type = \'project\' AND t.related_to_id = ?))';
+      params.push(project_id, project_id);
     }
 
     const searchTrim = search != null && String(search).trim() ? String(search).trim() : '';
@@ -163,7 +163,7 @@ const getAll = async (req, res) => {
     if (isNaN(limitNum) || limitNum < 1) limitNum = 50;
     const offset = (pageNum - 1) * limitNum;
 
-    query += ' ORDER BY t.due_date ASC LIMIT ? OFFSET ?';
+    query += ' ORDER BY t.is_pinned DESC, t.is_completed ASC, t.created_at DESC LIMIT ? OFFSET ?';
     params.push(limitNum, offset);
 
     let rows = null;
@@ -177,13 +177,18 @@ const getAll = async (req, res) => {
       try {
         let simpleWhere = 't.company_id = ? AND t.is_deleted = 0';
         const simpleParams = [companyId];
-        if (related_to_type) {
-          simpleWhere += ' AND t.related_to_type = ?';
-          simpleParams.push(related_to_type);
-        }
-        if (related_to_id) {
-          simpleWhere += ' AND t.related_to_id = ?';
-          simpleParams.push(related_to_id);
+        if (project_id) {
+          simpleWhere += ' AND (t.project_id = ? OR (t.related_to_type = \'project\' AND t.related_to_id = ?))';
+          simpleParams.push(project_id, project_id);
+        } else {
+          if (related_to_type) {
+            simpleWhere += ' AND t.related_to_type = ?';
+            simpleParams.push(related_to_type);
+          }
+          if (related_to_id) {
+            simpleWhere += ' AND t.related_to_id = ?';
+            simpleParams.push(related_to_id);
+          }
         }
         if (searchTrim) {
           const pattern = `%${searchTrim}%`;
@@ -194,7 +199,7 @@ const getAll = async (req, res) => {
         const simpleSql = `SELECT t.*, NULL AS assigned_to_name, NULL AS assigned_to_avatar, NULL AS created_by_name, NULL AS related_entity_name, NULL AS project_name
           FROM tasks t
           WHERE ${simpleWhere}
-          ORDER BY t.due_date ASC
+          ORDER BY t.is_pinned DESC, t.is_completed ASC, t.created_at DESC
           LIMIT ? OFFSET ?`;
         simpleParams.push(limitNum, offset);
         const [simpleRows] = await pool.query(simpleSql, simpleParams);
@@ -204,13 +209,18 @@ const getAll = async (req, res) => {
         try {
           let s2Where = 't.company_id = ?';
           const s2Params = [companyId];
-          if (related_to_type) {
-            s2Where += ' AND t.related_to_type = ?';
-            s2Params.push(related_to_type);
-          }
-          if (related_to_id) {
-            s2Where += ' AND t.related_to_id = ?';
-            s2Params.push(related_to_id);
+          if (project_id) {
+            s2Where += ' AND (t.project_id = ? OR (t.related_to_type = \'project\' AND t.related_to_id = ?))';
+            s2Params.push(project_id, project_id);
+          } else {
+            if (related_to_type) {
+              s2Where += ' AND t.related_to_type = ?';
+              s2Params.push(related_to_type);
+            }
+            if (related_to_id) {
+              s2Where += ' AND t.related_to_id = ?';
+              s2Params.push(related_to_id);
+            }
           }
           if (searchTrim) {
             const pattern = `%${searchTrim}%`;
@@ -221,7 +231,7 @@ const getAll = async (req, res) => {
           const s2Sql = `SELECT t.*, NULL AS assigned_to_name, NULL AS assigned_to_avatar, NULL AS created_by_name, NULL AS related_entity_name, NULL AS project_name
             FROM tasks t
             WHERE ${s2Where}
-            ORDER BY t.due_date ASC
+            ORDER BY t.is_pinned DESC, t.is_completed ASC, t.created_at DESC
             LIMIT ? OFFSET ?`;
           s2Params.push(limitNum, offset);
           const [s2Rows] = await pool.query(s2Sql, s2Params);
@@ -257,19 +267,10 @@ const getAll = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Get tasks error (serving mock data):', err.message);
-    // Return high-quality professional mock tasks if DB is down
-    const mockTasks = [
-      { id: 201, title: "Fix Dashboard API Crash", description: "The dashboard is crashing when database is offline. Implement mock fallbacks.", status: "Pending", priority: "High", due_date: new Date(), assigned_to_name: "Kavya", category: "Development" },
-      { id: 202, title: "Client Discovery Call", description: "Meeting with TechNova Solutions for requirement gathering.", status: "Pending", priority: "Medium", due_date: new Date(Date.now() + 86400000), assigned_to_name: "Devesh", category: "Meeting" },
-      { id: 203, title: "UI Components Review", description: "Check all sidebar links and menu items for consistency.", status: "Completed", priority: "Low", due_date: new Date(Date.now() - 86400000), assigned_to_name: "Super Admin", category: "Design" },
-      { id: 204, title: "Update Billing Invoices", description: "Generate monthly invoices for enterprise clients.", status: "Overdue", priority: "High", due_date: new Date(Date.now() - 172800000), assigned_to_name: "Kavya", category: "Finance" },
-      { id: 205, title: "Push Changes to Railway", description: "Deploy local fixes to production server.", status: "Pending", priority: "Medium", due_date: new Date(Date.now() + 172800000), assigned_to_name: "Devesh", category: "Deployment" }
-    ];
-    res.json({
-      success: true,
-      data: mockTasks,
-      pagination: { total: mockTasks.length, page: 1, limit: 50 }
+    console.error('Get tasks error:', err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || "Failed to retrieve tasks"
     });
   }
 };
@@ -343,7 +344,7 @@ const canUserMutateTask = async ({ taskId, userId, userRole }) => {
 
 const create = async (req, res) => {
   try {
-    const { title, description, due_date, priority, assigned_to, reminder_datetime, related_to_type, related_to_id, category, project_id, code } = req.body;
+    const { title, description, due_date, priority, assigned_to, assign_to, employee, reminder_datetime, related_to_type, related_to_id, category, project_id, code } = req.body;
     const rawCo = req.body.company_id ?? req.query.company_id ?? req.user?.company_id ?? 1;
     const companyId = (() => {
       const n = parseInt(String(rawCo), 10);
@@ -351,27 +352,47 @@ const create = async (req, res) => {
     })();
     const createdBy = req.user?.id || 1;
 
-    if (!title || !due_date || !assigned_to) {
-      return res.status(400).json({ success: false, error: req.t ? req.t('api_msg_b98598be') : "Title, Due Date, and Assigned User are required" });
-    }
+    // Support assigned_to, assign_to, and employee from request body
+    const inputAssignedTo = assigned_to !== undefined ? assigned_to : (assign_to !== undefined ? assign_to : employee);
 
     // Handle assigned_to if it comes as an array [id1, id2] or "[id1, id2]"
-    let finalAssignedTo = assigned_to;
-    if (Array.isArray(assigned_to)) {
-      finalAssignedTo = assigned_to[0];
-    } else if (typeof assigned_to === 'string' && assigned_to.startsWith('[') && assigned_to.endsWith(']')) {
+    let finalAssignedTo = inputAssignedTo;
+    if (Array.isArray(inputAssignedTo)) {
+      finalAssignedTo = inputAssignedTo[0];
+    } else if (typeof inputAssignedTo === 'string' && inputAssignedTo.startsWith('[') && inputAssignedTo.endsWith(']')) {
       try {
-        const parsed = JSON.parse(assigned_to);
+        const parsed = JSON.parse(inputAssignedTo);
         if (Array.isArray(parsed)) finalAssignedTo = parsed[0];
       } catch (e) {
-        // Fallback to parsing as integer if JSON parse fails
-        finalAssignedTo = parseInt(assigned_to.replace(/[\[\]]/g, ''), 10);
+        finalAssignedTo = parseInt(inputAssignedTo.replace(/[\[\]]/g, ''), 10);
       }
     }
     
     // Convert to null if empty or invalid
-    finalAssignedTo = (finalAssignedTo !== undefined && finalAssignedTo !== null && finalAssignedTo !== '') ? finalAssignedTo : null;
+    finalAssignedTo = (finalAssignedTo !== undefined && finalAssignedTo !== null && finalAssignedTo !== '') ? parseInt(String(finalAssignedTo), 10) : null;
 
+    // Correct validation: check assigned_to
+    if (!title || !finalAssignedTo) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Title and Assigned Employee are required" 
+      });
+    }
+
+    // Duplicate check: check if same title task already exists in the project
+    const finalProjectId = project_id || (related_to_type === 'project' ? related_to_id : null);
+    if (finalProjectId) {
+      const [existing] = await pool.execute(
+        `SELECT id FROM tasks WHERE title = ? AND project_id = ? AND is_deleted = 0 LIMIT 1`,
+        [title.trim(), finalProjectId]
+      );
+      if (existing.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Task creation failed: A task with this title already exists in the project"
+        });
+      }
+    }
 
     // Generate code if not provided
     const taskCode = code || await generateTaskCode(companyId);
@@ -381,22 +402,51 @@ const create = async (req, res) => {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         companyId,
-        title,
+        title.trim(),
         description || null,
         due_date || null,
         priority || 'Medium',
         finalAssignedTo,
         (reminder_datetime && reminder_datetime !== '') ? reminder_datetime : null,
-        related_to_type || null,
-        related_to_id || null,
-        category || 'CRM',
-        project_id || null,
+        related_to_type || (finalProjectId ? 'project' : null),
+        related_to_id || (finalProjectId ? finalProjectId : null),
+        category || (finalProjectId ? 'Project' : 'CRM'),
+        finalProjectId || null,
         createdBy,
         taskCode
       ]
     );
 
-    res.status(201).json({ success: true, id: result.insertId, message: req.t ? req.t('api_msg_50b64888') : "Task created successfully" });
+    const taskId = result.insertId;
+
+    // Log project task timeline activity
+    const finalLeadId = related_to_type === 'lead' ? related_to_id : null;
+    const finalDealId = related_to_type === 'deal' ? related_to_id : null;
+    const finalContactId = related_to_type === 'contact' ? related_to_id : null;
+    const finalCompanyId = related_to_type === 'company' ? related_to_id : null;
+
+    const refType = related_to_type || (finalProjectId ? 'project' : 'CRM');
+    const refId = related_to_id || finalProjectId || null;
+
+    const creatorName = req.user?.name || 'Admin';
+    await pool.execute(
+      `INSERT INTO activities (type, title, description, reference_type, reference_id, entity_type, entity_id, lead_id, deal_id, contact_id, company_id, created_by, is_completed)
+       VALUES ('task', 'Task created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [
+        `${creatorName} created task: ${title}`,
+        refType,
+        refId,
+        refType,
+        refId,
+        finalLeadId,
+        finalDealId,
+        finalContactId,
+        finalCompanyId,
+        createdBy
+      ]
+    );
+
+    res.status(201).json({ success: true, id: taskId, message: "Task created successfully" });
   } catch (err) {
     console.error('Create task error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -412,18 +462,17 @@ const update = async (req, res) => {
 
     // Security Check: Task existence
     const [existing] = await pool.execute('SELECT assigned_to, created_by FROM tasks WHERE id = ?', [id]);
-    if (existing.length === 0) return res.status(404).json({ success: false, error: req.t ? req.t('api_msg_e0214512') : "Task not found" });
+    if (existing.length === 0) return res.status(404).json({ success: false, error: "Task not found" });
 
     const canMutate = await canUserMutateTask({ taskId: id, userId, userRole });
     if (!canMutate) {
       return res.status(403).json({
         success: false,
-        error: req.t ? req.t('api_msg_4e77f18d') : 'Permission denied. You can only update your own tasks.'
+        error: 'Permission denied. You can only update your own tasks.'
       });
     }
 
-
-    const allowed = ['title', 'description', 'due_date', 'priority', 'status', 'assigned_to', 'reminder_datetime', 'related_to_type', 'related_to_id', 'category', 'project_id', 'code'];
+    const allowed = ['title', 'description', 'due_date', 'priority', 'status', 'assigned_to', 'reminder_datetime', 'related_to_type', 'related_to_id', 'category', 'project_id', 'code', 'is_pinned', 'is_completed'];
     const fields = [];
     const values = [];
 
@@ -451,16 +500,27 @@ const update = async (req, res) => {
           value = null;
         }
 
+        if (key === 'is_completed') {
+          value = value ? 1 : 0;
+          fields.push('status = ?');
+          values.push(value === 1 ? 'Completed' : 'Pending');
+        }
+
+        if (key === 'status') {
+          fields.push('is_completed = ?');
+          values.push(value === 'Completed' || value === 'Done' ? 1 : 0);
+        }
+
         fields.push(`${key} = ?`);
         values.push(value);
       }
     }
 
-    if (fields.length === 0) return res.status(400).json({ success: false, error: req.t ? req.t('api_msg_e9f00744') : "No valid fields to update" });
+    if (fields.length === 0) return res.status(400).json({ success: false, error: "No valid fields to update" });
 
     values.push(id);
     await pool.execute(`UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`, values);
-    res.json({ success: true, message: req.t ? req.t('api_msg_84d106d3') : "Task updated successfully" });
+    res.json({ success: true, message: "Task updated successfully" });
   } catch (err) {
     console.error('Update task error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -497,8 +557,8 @@ const remove = async (req, res) => {
 const markComplete = async (req, res) => {
   try {
     const { id } = req.params;
-    await pool.execute("UPDATE tasks SET status = 'Completed' WHERE id = ?", [id]);
-    res.json({ success: true, message: req.t ? req.t('api_msg_e606e60d') : "Task marked as completed" });
+    await pool.execute("UPDATE tasks SET status = 'Completed', is_completed = 1 WHERE id = ?", [id]);
+    res.json({ success: true, message: "Task marked as completed" });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -509,12 +569,12 @@ const reopen = async (req, res) => {
     const { id } = req.params;
     const [task] = await pool.execute('SELECT due_date FROM tasks WHERE id = ?', [id]);
     let status = 'Pending';
-    if (task.length > 0 && new Date(task[0].due_date) < new Date()) {
+    if (task.length > 0 && task[0].due_date && new Date(task[0].due_date) < new Date()) {
       status = 'Overdue';
     }
 
-    await pool.execute("UPDATE tasks SET status = ? WHERE id = ?", [status, id]);
-    res.json({ success: true, message: req.t ? req.t('api_msg_488c34d7') : "Task reopened" });
+    await pool.execute("UPDATE tasks SET status = ?, is_completed = 0 WHERE id = ?", [status, id]);
+    res.json({ success: true, message: "Task reopened" });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

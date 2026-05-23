@@ -377,6 +377,7 @@ const updateStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
     const companyId = req.query.company_id || req.body.company_id || 1;
+    const userId = req.user?.id || req.userId || 1;
 
     if (!status) {
       return res.status(400).json({
@@ -393,6 +394,13 @@ const updateStatus = async (req, res) => {
       });
     }
 
+    // Get old order status
+    const [oldOrders] = await pool.execute('SELECT status FROM orders WHERE id = ? AND company_id = ? AND is_deleted = 0', [id, companyId]);
+    if (oldOrders.length === 0) {
+      return res.status(404).json({ success: false, error: req.t ? req.t('api_msg_24909e87') : "Order not found" });
+    }
+    const oldStatus = oldOrders[0].status;
+
     await pool.execute(
       'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?',
       [status, id, companyId]
@@ -403,7 +411,32 @@ const updateStatus = async (req, res) => {
        FROM orders o
        LEFT JOIN clients c ON o.client_id = c.id
        WHERE o.id = ?`,
-      [id]
+       [id]
+    );
+
+    // Save history
+    const old_idx = validStatuses.indexOf(oldStatus) + 1;
+    const new_idx = validStatuses.indexOf(status) + 1;
+    await pool.execute(
+      'INSERT INTO stage_history (entity_type, entity_id, old_stage_id, new_stage_id, changed_by) VALUES (?, ?, ?, ?, ?)',
+      ['order', id, old_idx, new_idx, userId]
+    );
+
+    // Get user name
+    const [users] = await pool.execute('SELECT name FROM users WHERE id = ?', [userId]);
+    const userName = users.length > 0 ? users[0].name : 'System';
+
+    // Save timeline log
+    const description = `${userName} changed stage to ${status}`;
+    const activityTitle = `Order Status changed: ${oldStatus} → ${status}`;
+
+    await pool.execute(
+      `INSERT INTO activities (
+        type, title, description, reference_type, reference_id, 
+        entity_type, entity_id, created_by, assigned_to
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['comment', activityTitle, description, 'order', id, 'order', id, userId, userId]
     );
 
     res.json({
