@@ -6,23 +6,17 @@ const pool = require('../config/db');
  */
 const getAll = async (req, res) => {
     try {
-        const { company_id, contact_id, deal_id, lead_id, reference_type, reference_id } = req.query;
+        const { entity_type, entity_id } = req.query;
 
         let whereClause = 'WHERE a.is_deleted = 0';
         const params = [];
 
-        if (company_id || contact_id || deal_id || lead_id) {
-            whereClause += ' AND (';
-            const subConditions = [];
-            if (company_id) { subConditions.push('a.company_id = ?'); params.push(company_id); }
-            if (contact_id) { subConditions.push('a.contact_id = ?'); params.push(contact_id); }
-            if (deal_id) { subConditions.push('a.deal_id = ?'); params.push(deal_id); }
-            if (lead_id) { subConditions.push('a.lead_id = ?'); params.push(lead_id); }
-            whereClause += subConditions.join(' OR ');
-            whereClause += ')';
-        } else if (reference_type && reference_id) {
-            whereClause += ' AND a.reference_type = ? AND a.reference_id = ?';
-            params.push(reference_type, reference_id);
+        if (entity_type && entity_id) {
+            whereClause += ' AND a.entity_type = ? AND a.entity_id = ?';
+            params.push(entity_type, entity_id);
+        } else {
+            // If absolutely no scoping was provided, restrict to empty array to prevent global leaks
+            whereClause += ' AND 1 = 0';
         }
 
         const [activities] = await pool.execute(
@@ -54,11 +48,15 @@ const getAll = async (req, res) => {
  */
 const create = async (req, res) => {
     try {
-        const { type, description, reference_type, reference_id } = req.body;
+        const { type, description, entity_type, entity_id, assigned_to } = req.body;
         const created_by = req.user?.id || req.body.created_by;
 
-        if (!type || !reference_type || !reference_id) {
+        if (!type || !entity_type || !entity_id) {
             return res.status(400).json({ success: false, error: req.t ? req.t('api_msg_7687f115') : "Missing required fields" });
+        }
+
+        if (!created_by) {
+            return res.status(400).json({ success: false, error: "Authentication required" });
         }
 
         // Validate activity type - support: call, meeting, note, email, task, comment
@@ -70,12 +68,12 @@ const create = async (req, res) => {
             });
         }
 
-        // Validate reference_type
-        const validReferenceTypes = ['lead', 'contact', 'company', 'deal'];
-        if (!validReferenceTypes.includes(reference_type)) {
+        // Validate entity_type
+        const validEntityTypes = ['lead', 'contact', 'company', 'deal'];
+        if (!validEntityTypes.includes(entity_type)) {
             return res.status(400).json({
                 success: false,
-                error: `Invalid reference type. Allowed types: ${validReferenceTypes.join(', ')}`
+                error: `Invalid entity type. Allowed types: ${validEntityTypes.join(', ')}`
             });
         }
 
@@ -84,49 +82,29 @@ const create = async (req, res) => {
         let contact_id = null;
         let deal_id = null;
 
-        // Propagation Logic
-        if (reference_type === 'deal') {
-            deal_id = reference_id;
-            const [deals] = await pool.execute('SELECT company_id, contact_id, lead_id FROM deals WHERE id = ?', [deal_id]);
-            if (deals.length > 0) {
-                company_id = deals[0].company_id;
-                contact_id = deals[0].contact_id;
-                lead_id = deals[0].lead_id;
-            }
-        } else if (reference_type === 'lead') {
-            lead_id = reference_id;
-            // You might want to fetch company/contact from lead if they are linked
-            const [leads] = await pool.execute('SELECT company_id FROM leads WHERE id = ?', [lead_id]);
-            if (leads.length > 0) {
-                company_id = leads[0].company_id;
-            }
-        } else if (reference_type === 'contact') {
-            contact_id = reference_id;
-            const [cols] = await pool.execute('SHOW COLUMNS FROM contacts LIKE "company_id"');
-            if (cols.length > 0) {
-                const [contacts] = await pool.execute('SELECT company_id FROM contacts WHERE id = ?', [contact_id]);
-                if (contacts.length > 0) {
-                    company_id = contacts[0].company_id;
-                }
-            }
-            // Note: "all related deals" is handled by the fact that if a deal is created, 
-            // it links to this contact_id. So subsequent activities created on the contact
-            // won't automatically show in ALL deals unless we duplicate records or change filtering.
-            // Given the user's "NOT ALLOWED: Duplicate rows" rule, we'll stick to one row.
-        } else if (reference_type === 'company') {
-            company_id = reference_id;
+        if (entity_type === 'deal') {
+            deal_id = entity_id;
+        } else if (entity_type === 'lead') {
+            lead_id = entity_id;
+        } else if (entity_type === 'contact') {
+            contact_id = entity_id;
+        } else if (entity_type === 'company') {
+            company_id = entity_id;
         }
+
+        const creatorId = created_by;
+        const assigneeId = assigned_to || created_by;
 
         const [result] = await pool.execute(
             `INSERT INTO activities 
-       (type, description, reference_type, reference_id, lead_id, company_id, contact_id, deal_id, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [type, description, reference_type, reference_id, lead_id, company_id, contact_id, deal_id, created_by]
+       (type, description, reference_type, reference_id, entity_type, entity_id, lead_id, company_id, contact_id, deal_id, created_by, assigned_to)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [type, description, entity_type, entity_id, entity_type, entity_id, lead_id, company_id, contact_id, deal_id, creatorId, assigneeId]
         );
 
         res.json({
             success: true,
-            data: { id: result.insertId, type, description, reference_type, reference_id }
+            data: { id: result.insertId, type, description, entity_type, entity_id }
         });
     } catch (error) {
         console.error('Create activity error:', error);
@@ -144,6 +122,7 @@ const createWithExtras = async (req, res) => {
     try {
         let {
             type, description, reference_type, reference_id,
+            entity_type, entity_id,
             is_pinned, follow_up_at, meeting_link,
             title, assigned_to, deadline, meeting_date, meeting_time, participants
         } = req.body;
@@ -152,30 +131,21 @@ const createWithExtras = async (req, res) => {
         // Normalize type to lowercase if it exists
         if (type) type = type.toLowerCase();
 
-        // ---------------------------------------------------------------------
-        // INFER MISSING REFERENCE FIELDS
-        // If reference_type/id are missing but specific IDs are provided, infer them
-        // ---------------------------------------------------------------------
-        if (!reference_type || !reference_id) {
-            if (req.body.deal_id) {
-                reference_type = 'deal';
-                reference_id = req.body.deal_id;
-            } else if (req.body.contact_id) {
-                reference_type = 'contact';
-                reference_id = req.body.contact_id;
-            } else if (req.body.lead_id) {
-                reference_type = 'lead';
-                reference_id = req.body.lead_id;
-            } else if (req.body.company_id) {
-                reference_type = 'company';
-                reference_id = req.body.company_id;
-            }
-        }
+        // Strict entity mapping
+        if (!entity_type) entity_type = reference_type;
+        if (!entity_id) entity_id = reference_id;
 
-        if (!type || !reference_type || !reference_id) {
+        if (!type || !entity_type || !entity_id) {
             return res.status(400).json({
                 success: false,
-                error: req.t ? req.t('api_msg_63dbcbd9') : "Missing required fields (type, reference_type, reference_id)"
+                error: req.t ? req.t('api_msg_63dbcbd9') : "Missing required fields (type, entity_type, entity_id)"
+            });
+        }
+
+        if (!created_by) {
+            return res.status(400).json({
+                success: false,
+                error: "Authentication required"
             });
         }
 
@@ -189,52 +159,50 @@ const createWithExtras = async (req, res) => {
             }
         }
 
-        const validReferenceTypes = ['lead', 'contact', 'company', 'deal'];
-        if (!validReferenceTypes.includes(reference_type)) {
-            return res.status(400).json({ success: false, error: `Invalid reference type: ${reference_type}. Allowed: ${validReferenceTypes.join(', ')}` });
+        const validEntityTypes = ['lead', 'contact', 'company', 'deal'];
+        if (!validEntityTypes.includes(entity_type)) {
+            return res.status(400).json({ success: false, error: `Invalid entity type: ${entity_type}. Allowed: ${validEntityTypes.join(', ')}` });
         }
 
         let lead_id = null, company_id = null, contact_id = null, deal_id = null;
-        if (reference_type === 'deal') {
-            deal_id = reference_id;
-            const [deals] = await pool.execute('SELECT company_id, contact_id, lead_id FROM deals WHERE id = ?', [deal_id]);
-            if (deals.length > 0) {
-                company_id = deals[0].company_id;
-                contact_id = deals[0].contact_id;
-                lead_id = deals[0].lead_id;
+        if (entity_type === 'deal') {
+            deal_id = entity_id;
+        } else if (entity_type === 'lead') {
+            lead_id = entity_id;
+        } else if (entity_type === 'contact') {
+            contact_id = entity_id;
+        } else if (entity_type === 'company') {
+            company_id = entity_id;
+        }
+
+        const creatorId = created_by;
+        let assigneeId = (() => {
+            let val = assigned_to;
+            if (Array.isArray(val)) val = val[0];
+            else if (typeof val === 'string' && val.startsWith('[') && val.endsWith(']')) {
+                try { const p = JSON.parse(val); if (Array.isArray(p)) val = p[0]; } catch(e) { val = val.replace(/[\[\]]/g, ''); }
             }
-        } else if (reference_type === 'lead') {
-            lead_id = reference_id;
-            const [leads] = await pool.execute('SELECT company_id FROM leads WHERE id = ?', [lead_id]);
-            if (leads.length > 0) company_id = leads[0].company_id;
-        } else if (reference_type === 'contact') {
-            contact_id = reference_id;
-            const [contacts] = await pool.execute('SELECT company_id FROM contacts WHERE id = ?', [contact_id]);
-            if (contacts.length > 0) company_id = contacts[0].company_id;
-        } else if (reference_type === 'company') {
-            company_id = reference_id;
+            return (val && val !== '') ? val : null;
+        })();
+        if (!assigneeId) {
+            assigneeId = creatorId;
         }
 
         const pinned = is_pinned ? 1 : 0;
         const [result] = await pool.execute(
             `INSERT INTO activities (
                 type, title, description, reference_type, reference_id, 
+                entity_type, entity_id,
                 lead_id, company_id, contact_id, deal_id, 
                 created_by, assigned_to, is_pinned, follow_up_at, 
                 deadline, meeting_date, meeting_time, participants, meeting_link
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-                type, title && title !== '' ? title : null, description && description !== '' ? description : null, reference_type, reference_id,
+                type, title && title !== '' ? title : null, description && description !== '' ? description : null, entity_type, entity_id,
+                entity_type, entity_id,
                 lead_id, company_id, contact_id, deal_id,
-                created_by, (() => {
-                    let val = assigned_to;
-                    if (Array.isArray(val)) val = val[0];
-                    else if (typeof val === 'string' && val.startsWith('[') && val.endsWith(']')) {
-                        try { const p = JSON.parse(val); if (Array.isArray(p)) val = p[0]; } catch(e) { val = val.replace(/[\[\]]/g, ''); }
-                    }
-                    return (val && val !== '') ? val : null;
-                })(), pinned, (follow_up_at && follow_up_at !== '') ? follow_up_at : null,
+                creatorId, assigneeId, pinned, (follow_up_at && follow_up_at !== '') ? follow_up_at : null,
                 (deadline && deadline !== '') ? deadline : null, (meeting_date && meeting_date !== '') ? meeting_date : null, (meeting_time && meeting_time !== '') ? meeting_time : null, (participants && participants !== '') ? participants : null, (meeting_link && meeting_link !== '') ? meeting_link : null
             ]
         );
@@ -243,7 +211,7 @@ const createWithExtras = async (req, res) => {
             success: true,
             data: {
                 id: result.insertId,
-                type, title, description, reference_type, reference_id,
+                type, title, description, entity_type, entity_id,
                 is_pinned: !!is_pinned, follow_up_at, deadline, meeting_date, meeting_time, participants, meeting_link
             }
         });

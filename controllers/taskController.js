@@ -166,17 +166,25 @@ const getAll = async (req, res) => {
     query += ' ORDER BY t.due_date ASC LIMIT ? OFFSET ?';
     params.push(limitNum, offset);
 
-    let rows = [];
+    let rows = null;
     try {
       [rows] = await pool.query(query, params);
     } catch (e) {
       console.warn('⚠️ Primary task query failed, trying fallbacks...', e.message);
     }
 
-    if (!Array.isArray(rows) || rows.length === 0) {
+    if (!Array.isArray(rows)) {
       try {
         let simpleWhere = 't.company_id = ? AND t.is_deleted = 0';
         const simpleParams = [companyId];
+        if (related_to_type) {
+          simpleWhere += ' AND t.related_to_type = ?';
+          simpleParams.push(related_to_type);
+        }
+        if (related_to_id) {
+          simpleWhere += ' AND t.related_to_id = ?';
+          simpleParams.push(related_to_id);
+        }
         if (searchTrim) {
           const pattern = `%${searchTrim}%`;
           simpleWhere +=
@@ -196,6 +204,14 @@ const getAll = async (req, res) => {
         try {
           let s2Where = 't.company_id = ?';
           const s2Params = [companyId];
+          if (related_to_type) {
+            s2Where += ' AND t.related_to_type = ?';
+            s2Params.push(related_to_type);
+          }
+          if (related_to_id) {
+            s2Where += ' AND t.related_to_id = ?';
+            s2Params.push(related_to_id);
+          }
           if (searchTrim) {
             const pattern = `%${searchTrim}%`;
             s2Where +=

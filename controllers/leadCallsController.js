@@ -53,8 +53,7 @@ exports.getCallsByLeadId = async (req, res) => {
     const [calls] = await pool.query(
       `SELECT 
         lc.*,
-        u.first_name,
-        u.last_name
+        u.name
        FROM lead_calls lc
        LEFT JOIN users u ON lc.created_by = u.id
        WHERE lc.lead_id = ? AND lc.company_id = ?
@@ -126,8 +125,7 @@ exports.createCall = async (req, res) => {
     const [newCall] = await pool.query(
       `SELECT 
         lc.*,
-        u.first_name,
-        u.last_name
+        u.name
        FROM lead_calls lc
        LEFT JOIN users u ON lc.created_by = u.id
        WHERE lc.id = ?`,
@@ -191,8 +189,7 @@ exports.updateCall = async (req, res) => {
     const [updatedCall] = await pool.query(
       `SELECT 
         lc.*,
-        u.first_name,
-        u.last_name
+        u.name
        FROM lead_calls lc
        LEFT JOIN users u ON lc.created_by = u.id
        WHERE lc.id = ?`,

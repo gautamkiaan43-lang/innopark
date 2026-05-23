@@ -1,25 +1,18 @@
-
 const mysql = require('mysql2/promise');
 
-async function listDBs() {
-  const configs = [
-    { host: 'localhost', user: 'root', password: '', port: 3306 },
-    { host: '127.0.0.1', user: 'root', password: '', port: 3306 }
-  ];
-
-  for (const config of configs) {
+async function main() {
     try {
-      console.log(`Trying ${config.host}...`);
-      const connection = await mysql.createConnection(config);
-      const [rows] = await connection.execute('SHOW DATABASES');
-      console.log('Databases found:');
-      console.table(rows);
-      await connection.end();
-      return;
+        const connection = await mysql.createConnection({
+            host: 'localhost',
+            user: 'root',
+            password: '',
+            port: 3306
+        });
+        const [dbs] = await connection.query("SHOW DATABASES");
+        console.log("Databases on localhost:3306:", dbs);
+        await connection.end();
     } catch (e) {
-      console.log(`Failed ${config.host}: ${e.message}`);
+        console.error("Error listing local databases:", e.message);
     }
-  }
 }
-
-listDBs();
+main();

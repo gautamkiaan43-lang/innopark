@@ -60,7 +60,7 @@ const getAll = async (req, res) => {
         for (let contact of contacts) {
             const [activityCount] = await pool.execute(
                 `SELECT COUNT(*) as count FROM activities 
-         WHERE reference_type = 'contact' AND reference_id = ? AND is_deleted = 0`,
+          WHERE entity_type = 'contact' AND entity_id = ? AND is_deleted = 0`,
                 [contact.id]
             );
             contact.activities_count = activityCount[0].count;
@@ -130,7 +130,7 @@ const getById = async (req, res) => {
             `SELECT a.*, u.name as created_by_name
        FROM activities a
        LEFT JOIN users u ON a.created_by = u.id
-       WHERE a.reference_type = 'contact' AND a.reference_id = ? AND a.is_deleted = 0
+       WHERE a.entity_type = 'contact' AND a.entity_id = ? AND a.is_deleted = 0
        ORDER BY a.created_at DESC`,
             [id]
         );
@@ -403,7 +403,7 @@ const getActivities = async (req, res) => {
         const { id } = req.params;
         const { type } = req.query;
 
-        let whereClause = 'WHERE reference_type = ? AND reference_id = ? AND is_deleted = 0';
+        let whereClause = 'WHERE entity_type = ? AND entity_id = ? AND is_deleted = 0';
         const params = ['contact', id];
 
         if (type) {
@@ -440,8 +440,7 @@ const getActivities = async (req, res) => {
 const addActivity = async (req, res) => {
     try {
         const { id } = req.params;
-        const { type, description, follow_up_at, meeting_link, is_pinned } = req.body;
-        const companyId = req.companyId || req.body.company_id || req.query.company_id;
+        const { type, description, follow_up_at, meeting_link, is_pinned, assigned_to } = req.body;
         const userId = req.userId;
 
         if (!type || !description) {
@@ -451,15 +450,29 @@ const addActivity = async (req, res) => {
             });
         }
 
+        let assigneeId = (() => {
+            let val = assigned_to;
+            if (Array.isArray(val)) val = val[0];
+            else if (typeof val === 'string' && val.startsWith('[') && val.endsWith(']')) {
+                try { const p = JSON.parse(val); if (Array.isArray(p)) val = p[0]; } catch(e) { val = val.replace(/[\[\]]/g, ''); }
+            }
+            return (val && val !== '') ? val : null;
+        })();
+        if (!assigneeId) {
+            assigneeId = userId;
+        }
+
         // Insert activity
         const [result] = await pool.execute(
             `INSERT INTO activities (
-        type, description, reference_type, reference_id, contact_id,
-        company_id, created_by, follow_up_at, meeting_link, is_pinned
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                type, description, reference_type, reference_id, entity_type, entity_id,
+                contact_id, lead_id, company_id, deal_id,
+                created_by, assigned_to, follow_up_at, meeting_link, is_pinned
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-                type, description, 'contact', id, id, companyId, userId,
-                follow_up_at || null, meeting_link || null, is_pinned || 0
+                type, description, 'contact', id, 'contact', id,
+                id, null, null, null,
+                userId, assigneeId, follow_up_at || null, meeting_link || null, is_pinned || 0
             ]
         );
 

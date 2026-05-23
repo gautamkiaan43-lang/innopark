@@ -673,7 +673,7 @@ const getDealActivities = async (req, res) => {
         const { id } = req.params;
         const { type } = req.query;
 
-        let whereClause = 'WHERE reference_type = ? AND reference_id = ? AND is_deleted = 0';
+        let whereClause = 'WHERE entity_type = ? AND entity_id = ? AND is_deleted = 0';
         const params = ['deal', id];
 
         if (type) {
@@ -710,8 +710,7 @@ const getDealActivities = async (req, res) => {
 const addDealActivity = async (req, res) => {
     try {
         const { id } = req.params;
-        const { type, description, follow_up_at, meeting_link, is_pinned } = req.body;
-        const companyId = req.companyId || req.body.company_id || req.query.company_id;
+        const { type, description, follow_up_at, meeting_link, is_pinned, assigned_to } = req.body;
         const userId = req.userId;
 
         if (!type || !description) {
@@ -721,15 +720,29 @@ const addDealActivity = async (req, res) => {
             });
         }
 
+        let assigneeId = (() => {
+            let val = assigned_to;
+            if (Array.isArray(val)) val = val[0];
+            else if (typeof val === 'string' && val.startsWith('[') && val.endsWith(']')) {
+                try { const p = JSON.parse(val); if (Array.isArray(p)) val = p[0]; } catch(e) { val = val.replace(/[\[\]]/g, ''); }
+            }
+            return (val && val !== '') ? val : null;
+        })();
+        if (!assigneeId) {
+            assigneeId = userId;
+        }
+
         // Insert activity
         const [result] = await pool.execute(
             `INSERT INTO activities (
-                type, description, reference_type, reference_id, deal_id,
-                company_id, created_by, follow_up_at, meeting_link, is_pinned
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                type, description, reference_type, reference_id, entity_type, entity_id,
+                deal_id, lead_id, company_id, contact_id,
+                created_by, assigned_to, follow_up_at, meeting_link, is_pinned
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-                type, description, 'deal', id, id, companyId, userId,
-                follow_up_at || null, meeting_link || null, is_pinned || 0
+                type, description, 'deal', id, 'deal', id,
+                id, null, null, null,
+                userId, assigneeId, follow_up_at || null, meeting_link || null, is_pinned || 0
             ]
         );
 

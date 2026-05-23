@@ -20,6 +20,9 @@ const migrationService = {
                 await migrationService.ensureStandardColumns(table);
             }
 
+            // 4. Ensure activities has entity_type and entity_id columns
+            await migrationService.ensureEntityColumnsForActivities();
+
             console.log('✅ Auto-migrations completed successfully!');
         } catch (error) {
             console.error('❌ Migration error:', error.message);
@@ -79,6 +82,41 @@ const migrationService = {
             }
         } catch (error) {
             console.warn(`⚠️ Could not ensure standard columns for ${tableName}: ${error.message}`);
+        }
+    },
+
+    ensureEntityColumnsForActivities: async () => {
+        try {
+            const [columns] = await pool.execute(`SHOW COLUMNS FROM activities`);
+            const columnNames = columns.map(c => c.Field.toLowerCase());
+
+            let altered = false;
+            if (!columnNames.includes('entity_type')) {
+                console.log('🛠️ Adding entity_type to activities...');
+                await pool.execute(`ALTER TABLE activities ADD COLUMN entity_type VARCHAR(50) NULL AFTER reference_type`);
+                altered = true;
+            }
+            if (!columnNames.includes('entity_id')) {
+                console.log('🛠️ Adding entity_id to activities...');
+                await pool.execute(`ALTER TABLE activities ADD COLUMN entity_id INT NULL AFTER reference_id`);
+                altered = true;
+            }
+
+            if (altered) {
+                // Populate existing records with entity_type and entity_id from reference_type and reference_id
+                console.log('🛠️ Populating entity_type and entity_id from reference_type/id...');
+                await pool.execute(`UPDATE activities SET entity_type = reference_type, entity_id = reference_id WHERE entity_type IS NULL OR entity_id IS NULL`);
+
+                // Create index on (entity_type, entity_id) if it doesn't exist
+                console.log('🛠️ Creating index on activities (entity_type, entity_id)...');
+                try {
+                    await pool.execute(`CREATE INDEX idx_entity_type_id ON activities(entity_type, entity_id)`);
+                } catch (idxError) {
+                    console.warn(`⚠️ Could not create index (it might already exist): ${idxError.message}`);
+                }
+            }
+        } catch (error) {
+            console.warn(`⚠️ Could not ensure entity columns for activities: ${error.message}`);
         }
     }
 };
