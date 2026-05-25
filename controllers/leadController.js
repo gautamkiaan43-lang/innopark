@@ -383,6 +383,20 @@ const getById = async (req, res) => {
       price: s.item_price || 0
     }));
 
+    // Get linked contacts for this lead
+    try {
+      const [linkedContacts] = await pool.execute(
+        `SELECT id, name, email, phone, contact_type, status, is_primary
+         FROM contacts
+         WHERE lead_id = ? AND (is_deleted = 0 OR is_deleted IS NULL)
+         ORDER BY is_primary DESC, created_at ASC`,
+        [lead.id]
+      );
+      lead.contacts = linkedContacts || [];
+    } catch (e) {
+      lead.contacts = [];
+    }
+
     // Get custom fields using service
     lead.custom_fields = await customFieldService.getCustomFieldsWithValues(companyId, 'Leads', lead.id);
 
@@ -2229,6 +2243,142 @@ const convertLead = async (req, res) => {
   }
 };
 
+/**
+ * Get contacts linked to a specific lead
+ * GET /api/v1/leads/:id/contacts
+ */
+const getLeadContacts = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const companyId = req.companyId || req.query.company_id || req.body.company_id || 1;
+
+    const [contacts] = await pool.execute(
+      `SELECT c.*, 
+              u.name as assigned_user_name
+       FROM contacts c
+       LEFT JOIN users u ON c.assigned_user_id = u.id
+       WHERE c.lead_id = ? AND c.company_id = ? AND c.is_deleted = 0
+       ORDER BY c.is_primary DESC, c.created_at DESC`,
+      [id, companyId]
+    );
+
+    res.json({
+      success: true,
+      data: contacts
+    });
+  } catch (error) {
+    console.error('Get lead contacts error:', error);
+    res.status(500).json({
+      success: false,
+      error: req.t ? req.t('api_msg_b4210ea5') : "Failed to fetch lead contacts"
+    });
+  }
+};
+
+/**
+ * Link an existing contact to a lead
+ * POST /api/v1/leads/:id/contacts
+ * body: { contact_id }
+ */
+const addContactToLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { contact_id } = req.body;
+    const companyId = req.companyId || req.query.company_id || req.body.company_id || 1;
+
+    if (!contact_id) {
+      return res.status(400).json({
+        success: false,
+        error: "contact_id is required"
+      });
+    }
+
+    // Check if lead exists
+    const [leads] = await pool.execute(
+      `SELECT id FROM leads WHERE id = ? AND company_id = ? AND is_deleted = 0`,
+      [id, companyId]
+    );
+
+    if (leads.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: req.t ? req.t('api_msg_27feb92d') : "Lead not found"
+      });
+    }
+
+    // Check if contact exists
+    const [contacts] = await pool.execute(
+      `SELECT id FROM contacts WHERE id = ? AND company_id = ? AND is_deleted = 0`,
+      [contact_id, companyId]
+    );
+
+    if (contacts.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: req.t ? req.t('api_msg_cf2e6f36') : "Contact not found"
+      });
+    }
+
+    // Update contact to reference this lead
+    await pool.execute(
+      `UPDATE contacts SET lead_id = ? WHERE id = ? AND company_id = ?`,
+      [id, contact_id, companyId]
+    );
+
+    res.json({
+      success: true,
+      message: "Contact linked to lead successfully"
+    });
+  } catch (error) {
+    console.error('Add contact to lead error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to link contact to lead"
+    });
+  }
+};
+
+/**
+ * Unlink/remove a contact from a lead
+ * DELETE /api/v1/leads/:id/contacts/:contactId
+ */
+const removeContactFromLead = async (req, res) => {
+  try {
+    const { id, contactId } = req.params;
+    const companyId = req.companyId || req.query.company_id || req.body.company_id || 1;
+
+    // Check if contact exists and is linked to this lead
+    const [contacts] = await pool.execute(
+      `SELECT id FROM contacts WHERE id = ? AND lead_id = ? AND company_id = ? AND is_deleted = 0`,
+      [contactId, id, companyId]
+    );
+
+    if (contacts.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Contact not found or not linked to this lead"
+      });
+    }
+
+    // Unlink the contact (set lead_id to NULL)
+    await pool.execute(
+      `UPDATE contacts SET lead_id = NULL WHERE id = ? AND company_id = ?`,
+      [contactId, companyId]
+    );
+
+    res.json({
+      success: true,
+      message: "Contact unlinked from lead successfully"
+    });
+  } catch (error) {
+    console.error('Remove contact from lead error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to unlink contact from lead"
+    });
+  }
+};
+
 module.exports = {
   getAll,
   getById,
@@ -2250,5 +2400,8 @@ module.exports = {
   deleteContact,
   importLeads,
   convertLead,
+  getLeadContacts,
+  addContactToLead,
+  removeContactFromLead,
 };
 

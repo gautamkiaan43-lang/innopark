@@ -197,10 +197,18 @@ const getAll = async (req, res) => {
         );
 
         for (let deal of deals) {
-            const [items] = await pool.execute('SELECT * FROM deal_items WHERE deal_id = ?', [deal.id]);
-            deal.items = items || [];
-            // Get custom fields using service
-            deal.custom_fields = await customFieldService.getCustomFieldsWithValues(filterCompanyId, 'Deals', deal.id);
+            try {
+                const [items] = await pool.execute('SELECT * FROM deal_items WHERE deal_id = ?', [deal.id]);
+                deal.items = items || [];
+            } catch (e) {
+                deal.items = [];
+            }
+            // Get custom fields using service (safe - returns {} if table missing)
+            try {
+                deal.custom_fields = await customFieldService.getCustomFieldsWithValues(filterCompanyId, 'Deals', deal.id);
+            } catch (e) {
+                deal.custom_fields = {};
+            }
         }
 
         res.json({ success: true, data: deals });

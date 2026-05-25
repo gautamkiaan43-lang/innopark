@@ -43,6 +43,10 @@ router.post('/import', leadController.importLeads);
 
 // Parameterized routes (must come after specific routes)
 // More specific routes should come before less specific ones
+router.get('/:id/contacts', leadController.getLeadContacts);
+router.post('/:id/contacts', leadController.addContactToLead);
+router.delete('/:id/contacts/:contactId', leadController.removeContactFromLead);
+
 router.put('/:id/update-status', leadController.updateStatus);
 router.put('/:id/labels', leadController.updateLeadLabels);
 router.post('/:id/convert', leadController.convertLead);

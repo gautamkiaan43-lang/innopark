@@ -523,7 +523,7 @@ const create = async (req, res) => {
     const creatorId = req.user?.id || 1;
     await pool.execute(
       `INSERT INTO activities (type, description, reference_type, reference_id, entity_type, entity_id, created_by, is_completed)
-       VALUES ('task', ?, 'project', ?, 'project', ?, ?, 1)`,
+       VALUES ('note', ?, 'project', ?, 'project', ?, ?, 1)`,
       [`${creatorName} created project: ${finalProjectName}`, projectId, projectId, creatorId]
     );
 

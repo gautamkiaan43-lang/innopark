@@ -41,6 +41,38 @@ const ensureTableColumns = async () => {
   }
 };
 
+// =====================================================
+// Organization Wrapper Model (satisfies Mongoose findById spec)
+// =====================================================
+const Organization = {
+  findById: async (id) => {
+    if (!id) return null;
+    
+    // Check if the id is numeric (SQL ID)
+    if (/^\d+$/.test(id)) {
+      // First check if it is a company (tenant company)
+      const [companies] = await pool.execute(
+        `SELECT * FROM companies WHERE id = ? AND is_deleted = 0`,
+        [id]
+      );
+      if (companies.length > 0) {
+        return { ...companies[0], _type: 'company' };
+      }
+      
+      // If not, check if it is a client (customer organization)
+      const [clients] = await pool.execute(
+        `SELECT * FROM clients WHERE id = ? AND is_deleted = 0`,
+        [id]
+      );
+      if (clients.length > 0) {
+        return { ...clients[0], _type: 'client' };
+      }
+    }
+    
+    return null;
+  }
+};
+
 /**
  * Get all companies
  * GET /api/v1/companies
@@ -72,18 +104,6 @@ const getAll = async (req, res) => {
           params
         );
 
-        // Permanent Dummy Fallback: If DB is empty, show beautiful demo data
-        if (clients.length === 0) {
-          return res.json({ 
-            success: true, 
-            data: [
-              { id: 401, name: "TechNova Solutions", email: "contact@technova.com", phone: "+1-555-0101", website: "www.technova.com", notes: "Enterprise (Demo)", created_at: new Date() },
-              { id: 402, name: "Creative Mint", email: "hello@creativemint.io", phone: "+1-555-0102", website: "www.creativemint.io", notes: "Agency (Demo)", created_at: new Date() },
-              { id: 403, name: "Elite Realty", email: "info@eliterealty.com", phone: "+1-555-0103", website: "www.eliterealty.com", notes: "Real Estate (Demo)", created_at: new Date() }
-            ] 
-          });
-        }
-
         // Get custom fields for each client
         for (let client of clients) {
           client.custom_fields = await customFieldService.getCustomFieldsWithValues(companyId, 'Clients', client.id);
@@ -91,15 +111,8 @@ const getAll = async (req, res) => {
 
         return res.json({ success: true, data: clients });
       } catch (clientError) {
-        console.error('Get clients error (serving mock data):', clientError.message);
-        const mockClients = [
-          { id: 401, name: "TechNova Solutions", email: "contact@technova.com", phone: "+1-555-0101", website: "www.technova.com", address: "123 Tech Lane", city: "San Francisco", state: "CA", country: "USA", notes: "Enterprise client", created_at: new Date() },
-          { id: 402, name: "Creative Mint", email: "hello@creativemint.io", phone: "+1-555-0102", website: "www.creativemint.io", address: "456 Design Ave", city: "New York", state: "NY", country: "USA", notes: "Marketing agency", created_at: new Date() },
-          { id: 403, name: "Elite Realty", email: "info@eliterealty.com", phone: "+1-555-0103", website: "www.eliterealty.com", address: "789 Property Blvd", city: "Miami", state: "FL", country: "USA", notes: "Real estate client", created_at: new Date() },
-          { id: 404, name: "Alpha Corp", email: "admin@alphacorp.tech", phone: "+1-555-0104", website: "www.alphacorp.tech", address: "321 Innovation Dr", city: "Austin", state: "TX", country: "USA", notes: "SaaS provider", created_at: new Date() },
-          { id: 405, name: "DataStream", email: "support@datastream.net", phone: "+1-555-0105", website: "www.datastream.net", address: "987 Network Way", city: "Seattle", state: "WA", country: "USA", notes: "Data analytics partner", created_at: new Date() }
-        ];
-        return res.json({ success: true, data: mockClients });
+        console.error('Get clients error:', clientError);
+        return res.status(500).json({ success: false, error: clientError.message || 'Failed to fetch clients' });
       }
     } else {
       // Logic for SuperAdmin (Companies)
@@ -124,17 +137,6 @@ const getAll = async (req, res) => {
           params
         );
 
-        // Permanent Dummy Fallback: If DB is empty, show beautiful demo data
-        if (companies.length === 0) {
-          return res.json({ 
-            success: true, 
-            data: [
-              { id: 1, name: "Innopark Global", email: "admin@innopark.com", phone: "+91-9876543210", industry: "Technology", status: "active", created_at: new Date() },
-              { id: 2, name: "Kiaan Tech Solutions", email: "info@kiaantech.com", phone: "+91-9876543211", industry: "Services", status: "active", created_at: new Date() }
-            ] 
-          });
-        }
-
         const defaultLogo = await settingsService.getSetting('company_logo', null);
 
         // Get custom fields for each company
@@ -152,13 +154,8 @@ const getAll = async (req, res) => {
           data: companiesWithCF
         });
       } catch (companyError) {
-        console.error('Get companies error (serving mock data):', companyError.message);
-        const mockCompanies = [
-          { id: 1, name: "Innopark Global", email: "admin@innopark.com", phone: "+91-9876543210", industry: "Technology", website: "www.innopark.com", status: "active", created_at: new Date() },
-          { id: 2, name: "Kiaan Tech Solutions", email: "info@kiaantech.com", phone: "+91-9876543211", industry: "Services", website: "www.kiaantech.com", status: "active", created_at: new Date() },
-          { id: 3, name: "Nexus CRM Pro", email: "support@nexuscrm.io", phone: "+44-20-71234567", industry: "Software", website: "www.nexuscrm.io", status: "inactive", created_at: new Date() }
-        ];
-        return res.json({ success: true, data: mockCompanies });
+        console.error('Get companies error:', companyError);
+        return res.status(500).json({ success: false, error: companyError.message || 'Failed to fetch companies' });
       }
     }
   } catch (error) {
@@ -177,47 +174,83 @@ const getById = async (req, res) => {
     const userRole = req.user?.role || 'ADMIN';
     const companyId = req.companyId || req.query.company_id || null; // From JWT auth
 
+    const customerOrganizationId = id || req.query.customerOrganizationId || req.body.customerOrganizationId || null;
+    
+    // 2. Add console logs
+    console.log('--- Customer Organization Debug Log ---');
+    console.log('req.body:', JSON.stringify(req.body, null, 2));
+    console.log('req.params:', JSON.stringify(req.params, null, 2));
+    console.log('customerOrganizationId:', customerOrganizationId);
+
+    // 4. Validate customerOrganizationId
+    let isIdInvalid = false;
+    let validationErrorMsg = null;
+
+    if (customerOrganizationId === undefined || customerOrganizationId === null || customerOrganizationId === '') {
+      isIdInvalid = true;
+      validationErrorMsg = "Customer organization ID is undefined or null";
+    } else {
+      const idStr = String(customerOrganizationId);
+      const isMongoId = /^[0-9a-fA-F]{24}$/.test(idStr);
+      const isNumericId = /^\d+$/.test(idStr);
+
+      if (isMongoId) {
+        console.warn(`⚠️ Warning: MongoDB ObjectId format detected: ${customerOrganizationId}. This system uses MySQL integer IDs.`);
+        isIdInvalid = true;
+        validationErrorMsg = "Invalid MongoDB ObjectId for MySQL system";
+      } else if (!isNumericId) {
+        isIdInvalid = true;
+        validationErrorMsg = "Invalid organization ID format";
+      }
+    }
+
+    if (isIdInvalid) {
+      console.error(`❌ Validation failed: ${validationErrorMsg}`);
+      return res.status(404).json({
+        success: false,
+        error: "Customer organization not found"
+      });
+    }
+
+    // 3. Verify if organization exists using Organization.findById
+    const organization = await Organization.findById(customerOrganizationId);
+    if (!organization) {
+      console.error(`❌ Organization with ID ${customerOrganizationId} not found in database.`);
+      return res.status(404).json({
+        success: false,
+        error: "Customer organization not found"
+      });
+    }
+
     if (userRole !== 'SUPERADMIN') {
       // Check if the requested ID is the user's own company ID.
       // If it is, we return the tenant company record from the 'companies' table.
-      if (String(id) === String(companyId)) {
-        const [companies] = await pool.execute(
-          `SELECT * FROM companies WHERE id = ? AND is_deleted = 0`,
-          [id]
-        );
-
-        if (companies.length > 0) {
-          const company = companies[0];
-          if (!company.logo) {
-            company.logo = await settingsService.getSetting('company_logo', null);
-          }
-          // Get custom fields using service
-          company.custom_fields = await customFieldService.getCustomFieldsWithValues(company.id, 'Companies', company.id);
-
-          return res.json({
-            success: true,
-            data: company
-          });
+      if (String(id) === String(companyId) && organization._type === 'company') {
+        const company = organization;
+        if (!company.logo) {
+          company.logo = await settingsService.getSetting('company_logo', null);
         }
-      }
+        // Get custom fields using service
+        company.custom_fields = await customFieldService.getCustomFieldsWithValues(company.id, 'Companies', company.id);
 
-      // If it's not the user's own company, we search in the 'clients' table (Customer Organizations)
-      const [clients] = await pool.execute(
-        `SELECT id, company_name as name, industry, email, phone_number as phone, website, address, city, state, zip, country, 
-                status, created_at, updated_at, is_deleted, company_id
-         FROM clients 
-         WHERE id = ? AND company_id = ? AND is_deleted = 0`,
-        [id, companyId]
-      );
-
-      if (clients.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: req.t ? req.t('api_msg_137b48da') : "Customer organization not found"
+        return res.json({
+          success: true,
+          data: company
         });
       }
 
-      const client = clients[0];
+      // If it's not the user's own company, check if it exists in the 'clients' table
+      // AND verify it belongs to the user's company (tenant isolation)
+      if (organization._type !== 'client' || organization.company_id !== companyId) {
+        console.error(`❌ Organization with ID ${customerOrganizationId} is not a valid client of company ${companyId}`);
+        return res.status(404).json({
+          success: false,
+          error: "Customer organization not found"
+        });
+      }
+
+      const client = organization;
+      client.name = client.company_name;
       // Get custom fields using service
       client.custom_fields = await customFieldService.getCustomFieldsWithValues(companyId, 'Clients', client.id);
 
@@ -227,23 +260,17 @@ const getById = async (req, res) => {
       });
     }
 
-    // Ensure table has required columns for SuperAdmin view
+    // For SuperAdmin
     await ensureTableColumns();
 
-    const [companies] = await pool.execute(
-      `SELECT * FROM companies 
-       WHERE id = ? AND is_deleted = 0`,
-      [id]
-    );
-
-    if (companies.length === 0) {
+    if (organization._type !== 'company') {
       return res.status(404).json({
         success: false,
-        error: req.t ? req.t('api_msg_692d285b') : "Company not found"
+        error: "Company not found"
       });
     }
 
-    const company = companies[0];
+    const company = organization;
     if (!company.logo) {
       company.logo = await settingsService.getSetting('company_logo', null);
     }
@@ -369,21 +396,75 @@ const update = async (req, res) => {
       custom_fields
     } = req.body;
 
-    // Check if company exists
-    const [existing] = await pool.execute(
-      `SELECT id FROM companies 
-       WHERE id = ? AND is_deleted = 0`,
-      [id]
-    );
+    const customerOrganizationId = id;
+    
+    // Add logs
+    console.log('--- Customer Organization Debug Log ---');
+    console.log('req.body:', JSON.stringify(req.body, null, 2));
+    console.log('req.params:', JSON.stringify(req.params, null, 2));
+    console.log('customerOrganizationId:', customerOrganizationId);
 
-    if (existing.length === 0) {
+    // Validate ID
+    let isIdInvalid = false;
+    let validationErrorMsg = null;
+
+    if (!customerOrganizationId) {
+      isIdInvalid = true;
+      validationErrorMsg = "Customer organization ID is undefined or null";
+    } else {
+      const idStr = String(customerOrganizationId);
+      const isMongoId = /^[0-9a-fA-F]{24}$/.test(idStr);
+      const isNumericId = /^\d+$/.test(idStr);
+
+      if (isMongoId) {
+        console.warn(`⚠️ Warning: MongoDB ObjectId format detected: ${customerOrganizationId}. This system uses MySQL integer IDs.`);
+        isIdInvalid = true;
+        validationErrorMsg = "Invalid MongoDB ObjectId for MySQL system";
+      } else if (!isNumericId) {
+        isIdInvalid = true;
+        validationErrorMsg = "Invalid organization ID format";
+      }
+    }
+
+    if (isIdInvalid) {
+      console.error(`❌ Validation failed: ${validationErrorMsg}`);
       return res.status(404).json({
         success: false,
-        error: req.t ? req.t('api_msg_692d285b') : "Company not found"
+        error: "Customer organization not found"
+      });
+    }
+
+    // Verify if organization exists using Organization.findById
+    const organization = await Organization.findById(customerOrganizationId);
+    if (!organization) {
+      console.error(`❌ Organization with ID ${customerOrganizationId} not found in database.`);
+      return res.status(404).json({
+        success: false,
+        error: "Customer organization not found"
       });
     }
 
     const userRole = req.user?.role || 'ADMIN';
+    const companyId = req.companyId || req.body.company_id || req.query.company_id || null;
+
+    // Enforce tenant isolation for non-superadmins
+    if (userRole !== 'SUPERADMIN') {
+      if (organization._type !== 'client' || organization.company_id !== companyId) {
+        console.error(`❌ Organization with ID ${customerOrganizationId} does not belong to company ${companyId}`);
+        return res.status(404).json({
+          success: false,
+          error: "Customer organization not found"
+        });
+      }
+    } else {
+      if (organization._type !== 'company') {
+        return res.status(404).json({
+          success: false,
+          error: "Company not found"
+        });
+      }
+    }
+
     const tableName = (userRole === 'SUPERADMIN') ? 'companies' : 'clients';
     const nameColumn = (userRole === 'SUPERADMIN') ? 'name' : 'company_name';
     const phoneColumn = (userRole === 'SUPERADMIN') ? 'phone' : 'phone_number';
@@ -449,7 +530,7 @@ const update = async (req, res) => {
     
     const whereValues = (userRole === 'SUPERADMIN') 
       ? [id] 
-      : [id, req.companyId || req.body.company_id];
+      : [id, companyId];
 
     await pool.execute(
       `UPDATE ${tableName} 
@@ -461,7 +542,7 @@ const update = async (req, res) => {
     // Save custom fields using service
     if (custom_fields) {
       const module = (userRole === 'SUPERADMIN') ? 'Companies' : 'Clients';
-      const effectiveCompanyId = (module === 'Companies') ? id : (req.companyId || req.body.company_id);
+      const effectiveCompanyId = (module === 'Companies') ? id : companyId;
       await customFieldService.saveCustomFields(effectiveCompanyId, module, id, custom_fields);
     }
 
@@ -493,26 +574,46 @@ const update = async (req, res) => {
 const deleteCompany = async (req, res) => {
   try {
     const { id } = req.params;
+    const userRole = req.user?.role || 'ADMIN';
+    const companyId = req.companyId || req.query.company_id || null;
 
-    const [existing] = await pool.execute(
-      `SELECT id FROM companies 
-       WHERE id = ? AND is_deleted = 0`,
-      [id]
-    );
-
-    if (existing.length === 0) {
+    const organization = await Organization.findById(id);
+    if (!organization) {
       return res.status(404).json({
         success: false,
-        error: req.t ? req.t('api_msg_692d285b') : "Company not found"
+        error: "Customer organization not found"
       });
     }
 
-    await pool.execute(
-      `UPDATE companies 
-       SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-      [id]
-    );
+    if (userRole !== 'SUPERADMIN') {
+      if (organization._type !== 'client' || organization.company_id !== companyId) {
+        return res.status(404).json({
+          success: false,
+          error: "Customer organization not found"
+        });
+      }
+      
+      await pool.execute(
+        `UPDATE clients 
+         SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND company_id = ?`,
+        [id, companyId]
+      );
+    } else {
+      if (organization._type !== 'company') {
+        return res.status(404).json({
+          success: false,
+          error: "Company not found"
+        });
+      }
+
+      await pool.execute(
+        `UPDATE companies 
+         SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [id]
+      );
+    }
 
     res.json({
       success: true,

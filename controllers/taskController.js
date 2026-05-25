@@ -472,7 +472,18 @@ const update = async (req, res) => {
       });
     }
 
-    const allowed = ['title', 'description', 'due_date', 'priority', 'status', 'assigned_to', 'reminder_datetime', 'related_to_type', 'related_to_id', 'category', 'project_id', 'code', 'is_pinned', 'is_completed'];
+    if (updates.hasOwnProperty('title') && (!updates.title || !updates.title.trim())) {
+      return res.status(400).json({ success: false, error: "Title is required" });
+    }
+
+    if (updates.hasOwnProperty('assign_to') || updates.hasOwnProperty('assigned_to')) {
+      const val = updates.assign_to !== undefined ? updates.assign_to : updates.assigned_to;
+      if (val === null || val === '' || val === undefined) {
+        return res.status(400).json({ success: false, error: "Assigned Employee is required" });
+      }
+    }
+
+    const allowed = ['title', 'description', 'due_date', 'priority', 'status', 'assigned_to', 'assign_to', 'reminder_datetime', 'related_to_type', 'related_to_id', 'category', 'project_id', 'code', 'is_pinned', 'is_completed'];
     const fields = [];
     const values = [];
 
@@ -480,8 +491,8 @@ const update = async (req, res) => {
       if (allowed.includes(key) && updates[key] !== undefined) {
         let value = updates[key];
         
-        // Handle assigned_to array if updating
-        if (key === 'assigned_to') {
+        // Handle assign_to or assigned_to
+        if (key === 'assign_to' || key === 'assigned_to') {
           if (Array.isArray(value)) {
             value = value[0];
           } else if (typeof value === 'string' && value.startsWith('[') && value.endsWith(']')) {
@@ -492,7 +503,12 @@ const update = async (req, res) => {
               value = parseInt(value.replace(/[\[\]]/g, ''), 10);
             }
           }
-          value = (value !== '' && value !== null) ? value : null;
+          const parsedVal = (value !== '' && value !== null && value !== undefined) ? parseInt(String(value), 10) : null;
+          if (!fields.includes('assigned_to = ?')) {
+            fields.push('assigned_to = ?');
+            values.push(parsedVal);
+          }
+          continue;
         }
 
         // Handle empty strings for date fields

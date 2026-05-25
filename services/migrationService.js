@@ -29,6 +29,9 @@ const migrationService = {
             // 6. Ensure custom sections schema is aligned
             await migrationService.ensureCustomSectionsSchema();
 
+            // 7. Ensure user view preferences schema is aligned
+            await migrationService.ensureUserViewPreferencesSchema();
+
             console.log('✅ Auto-migrations completed successfully!');
         } catch (error) {
             console.error('❌ Migration error:', error.message);
@@ -64,6 +67,20 @@ const migrationService = {
                 // Column missing, add it as nullable
                 console.log('🛠️ Adding tasks.code column...');
                 await pool.execute(`ALTER TABLE tasks ADD COLUMN code VARCHAR(255) NULL DEFAULT NULL AFTER id`);
+            }
+
+            // Check and add is_pinned
+            const [pinnedCol] = await pool.execute(`SHOW COLUMNS FROM tasks LIKE 'is_pinned'`);
+            if (pinnedCol.length === 0) {
+                console.log('🛠️ Adding tasks.is_pinned column...');
+                await pool.execute(`ALTER TABLE tasks ADD COLUMN is_pinned TINYINT(1) DEFAULT 0`);
+            }
+
+            // Check and add is_completed
+            const [completedCol] = await pool.execute(`SHOW COLUMNS FROM tasks LIKE 'is_completed'`);
+            if (completedCol.length === 0) {
+                console.log('🛠️ Adding tasks.is_completed column...');
+                await pool.execute(`ALTER TABLE tasks ADD COLUMN is_completed TINYINT(1) DEFAULT 0`);
             }
         } catch (error) {
             console.warn(`⚠️ Could not fix tasks table: ${error.message}`);
@@ -221,6 +238,26 @@ const migrationService = {
             console.log('✅ Custom sections schema aligned successfully!');
         } catch (error) {
             console.error('❌ Custom sections schema alignment error:', error.message);
+        }
+    },
+
+    ensureUserViewPreferencesSchema: async () => {
+        try {
+            console.log('🛠️ Ensuring user view preferences schema is aligned...');
+            await pool.execute(`
+                CREATE TABLE IF NOT EXISTS user_view_preferences (
+                    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT UNSIGNED NOT NULL,
+                    module_name VARCHAR(100) NOT NULL,
+                    view_type VARCHAR(50) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_user_module (user_id, module_name)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            `);
+            console.log('✅ User view preferences schema aligned successfully!');
+        } catch (error) {
+            console.error('❌ User view preferences schema alignment error:', error.message);
         }
     }
 };

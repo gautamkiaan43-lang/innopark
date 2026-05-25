@@ -60,6 +60,7 @@ const leadSourceRoutes = require('./routes/leadSourceRoutes');
 const leadPipelineRoutes = require('./routes/leadPipelineRoutes');
 const dealPipelineRoutes = require('./routes/dealPipelineRoutes');
 const contactRoutes = require('./routes/contactRoutes');
+const userViewPreferenceRoutes = require('./routes/userViewPreferenceRoutes');
 
 
 const app = express();
@@ -125,9 +126,32 @@ app.use('/uploads', express.static('uploads'));
 // =====================================================
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+  let dbStatus = 'UNKNOWN';
+  let dbError = null;
+  try {
+    const db = require('./config/db');
+    await db.query('SELECT 1');
+    dbStatus = 'CONNECTED';
+  } catch (err) {
+    dbStatus = 'FAILED';
+    dbError = err.message;
+  }
+
   res.json({
-    status: 'OK',
+    status: dbStatus === 'CONNECTED' ? 'OK' : 'DEGRADED',
+    database: {
+      status: dbStatus,
+      error: dbError,
+      config: {
+        host: process.env.MYSQLHOST || process.env.DB_HOST || process.env.MYSQL_HOST || '127.0.0.1',
+        database: process.env.MYSQLDATABASE || process.env.DB_NAME || process.env.MYSQL_DATABASE || 'innopark_db',
+        port: process.env.MYSQLPORT || process.env.DB_PORT || process.env.MYSQL_PORT || '3306',
+        user: process.env.MYSQLUSER || process.env.DB_USER || process.env.MYSQL_USER || 'root',
+        hasPassword: !!(process.env.MYSQLPASSWORD || process.env.DB_PASS || process.env.DB_PASSWORD || process.env.MYSQL_PASSWORD),
+        hasDatabaseUrl: !!(process.env.MYSQL_URL || process.env.DATABASE_URL)
+      }
+    },
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
@@ -191,6 +215,7 @@ app.use(`${apiBase}/notes`, noteRoutes);
 app.use(`${apiBase}/orders`, orderRoutes);
 app.use(`${apiBase}/items`, itemRoutes);
 app.use(`${apiBase}/pwa`, pwaRoutes);
+app.use(`${apiBase}/view-preferences`, userViewPreferenceRoutes);
 
 
 // Notification Settings routes

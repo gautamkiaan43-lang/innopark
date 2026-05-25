@@ -5,8 +5,11 @@
 const express = require('express');
 const router = express.Router();
 const companyController = require('../controllers/companyController');
+const { verifyToken } = require('../middleware/auth');
 
-// No authentication required - all routes are public
+// Apply authentication middleware
+router.use(verifyToken);
+
 router.get('/', companyController.getAll);
 router.post('/', companyController.create);
 router.get('/:id', companyController.getById);
