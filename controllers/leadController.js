@@ -1965,14 +1965,18 @@ const updateStage = async (req, res) => {
     const description = `${userName} changed stage to ${newStageName}`;
     const activityTitle = `Stage changed: ${oldStageName} → ${newStageName}`;
     
-    await pool.execute(
-      `INSERT INTO activities (
-        type, title, description, reference_type, reference_id, 
-        entity_type, entity_id, lead_id, created_by, assigned_to
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['comment', activityTitle, description, 'lead', id, 'lead', id, id, userId, userId]
-    );
+    try {
+      await pool.execute(
+        `INSERT INTO activities (
+          type, title, description, reference_type, reference_id, 
+          entity_type, entity_id, lead_id, created_by, assigned_to
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['comment', activityTitle, description, 'lead', id, 'lead', id, id, userId, userId]
+      );
+    } catch (actError) {
+      console.error('⚠️ Failed to insert activity log for lead stage change:', actError.message);
+    }
 
     res.json({ 
       success: true, 
@@ -2193,26 +2197,30 @@ const convertLead = async (req, res) => {
       if (createDeal) entitiesCreated.push('Deal');
       const logText = `Lead converted to ${entitiesCreated.join(' + ')}`;
 
-      await conn.execute(
-        `INSERT INTO activities (
-          type, description, reference_type, reference_id, entity_type, entity_id,
-          company_id, lead_id, contact_id, deal_id, created_by, assigned_to
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          'System',
-          logText,
-          'lead',
-          lead.id,
-          'lead',
-          lead.id,
-          lead.company_id,
-          lead.id,
-          contactId,
-          dealId,
-          req.userId || 1,
-          lead.owner_id || 1
-        ]
-      );
+      try {
+        await conn.execute(
+          `INSERT INTO activities (
+            type, description, reference_type, reference_id, entity_type, entity_id,
+            company_id, lead_id, contact_id, deal_id, created_by, assigned_to
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            'note',
+            logText,
+            'lead',
+            lead.id,
+            'lead',
+            lead.id,
+            lead.company_id,
+            lead.id,
+            contactId,
+            dealId,
+            req.userId || 1,
+            lead.owner_id || 1
+          ]
+        );
+      } catch (actError) {
+        console.error('⚠️ Failed to insert activity log for lead conversion:', actError.message);
+      }
 
       await conn.commit();
       conn.release();

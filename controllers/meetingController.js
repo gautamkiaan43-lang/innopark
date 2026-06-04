@@ -102,6 +102,49 @@ const create = async (req, res) => {
         );
 
         const newMeetingId = result.insertId;
+
+        // Auto-propagate to activities table if related to an entity
+        if (related_to_type && related_to_id) {
+            const validEntityTypes = ['lead', 'contact', 'company', 'deal', 'project'];
+            if (validEntityTypes.includes(related_to_type)) {
+                let lead_id = null, company_id = null, contact_id = null, deal_id = null;
+                if (related_to_type === 'deal') deal_id = related_to_id;
+                else if (related_to_type === 'lead') lead_id = related_to_id;
+                else if (related_to_type === 'contact') contact_id = related_to_id;
+                else if (related_to_type === 'company') company_id = related_to_id;
+
+                await pool.execute(
+                    `INSERT INTO activities (
+                        type, title, description, reference_type, reference_id, 
+                        entity_type, entity_id,
+                        lead_id, company_id, contact_id, deal_id, 
+                        created_by, assigned_to, 
+                        meeting_date, meeting_time, start_time, end_time, meeting_link
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        'meeting',
+                        title,
+                        description || null,
+                        'meeting',
+                        newMeetingId,
+                        related_to_type,
+                        related_to_id,
+                        lead_id,
+                        company_id,
+                        contact_id,
+                        deal_id,
+                        createdBy,
+                        finalAssignedTo,
+                        meeting_date,
+                        start_time,
+                        start_time,
+                        end_time,
+                        location || null
+                    ]
+                );
+            }
+        }
+
         const [newMeeting] = await pool.execute('SELECT * FROM meetings WHERE id = ?', [newMeetingId]);
 
         res.status(201).json({ success: true, data: newMeeting[0], message: req.t ? req.t('api_msg_2f14f1d6') : "Meeting created successfully" });
@@ -157,6 +200,48 @@ const update = async (req, res) => {
 
         await pool.execute(`UPDATE meetings SET ${fields.join(', ')} WHERE id = ?`, values);
 
+        // Propagate updates to activities if exists
+        try {
+            const activityUpdates = [];
+            const activityParams = [];
+            if (updates.title !== undefined) { activityUpdates.push('title = ?'); activityParams.push(updates.title); }
+            if (updates.description !== undefined) { activityUpdates.push('description = ?'); activityParams.push(updates.description); }
+            if (updates.meeting_date !== undefined) { activityUpdates.push('meeting_date = ?'); activityParams.push(updates.meeting_date); }
+            if (updates.start_time !== undefined) { 
+                activityUpdates.push('meeting_time = ?'); activityParams.push(updates.start_time);
+                activityUpdates.push('start_time = ?'); activityParams.push(updates.start_time);
+            }
+            if (updates.end_time !== undefined) { activityUpdates.push('end_time = ?'); activityParams.push(updates.end_time); }
+            if (updates.location !== undefined) { activityUpdates.push('meeting_link = ?'); activityParams.push(updates.location); }
+            
+            if (updates.assigned_to !== undefined) {
+                let val = updates.assigned_to;
+                if (Array.isArray(val)) {
+                    val = val[0];
+                } else if (typeof val === 'string' && val.startsWith('[') && val.endsWith(']')) {
+                    try {
+                        const parsed = JSON.parse(val);
+                        if (Array.isArray(parsed)) val = parsed[0];
+                    } catch (e) {
+                        val = parseInt(val.replace(/[\[\]]/g, ''), 10);
+                    }
+                }
+                const finalAssignedTo = (val !== '' && val !== null) ? val : null;
+                activityUpdates.push('assigned_to = ?');
+                activityParams.push(finalAssignedTo);
+            }
+
+            if (activityUpdates.length > 0) {
+                activityParams.push(id);
+                await pool.execute(
+                    `UPDATE activities SET ${activityUpdates.join(', ')} WHERE type = 'meeting' AND reference_id = ?`,
+                    activityParams
+                );
+            }
+        } catch (activityErr) {
+            console.error('Failed to propagate meeting update to activities:', activityErr);
+        }
+
         const [updatedMeeting] = await pool.execute('SELECT * FROM meetings WHERE id = ?', [id]);
         res.json({ success: true, data: updatedMeeting[0], message: req.t ? req.t('api_msg_91d35b28') : "Meeting updated successfully" });
     } catch (err) {
@@ -169,6 +254,11 @@ const remove = async (req, res) => {
     try {
         const { id } = req.params;
         await pool.execute('UPDATE meetings SET is_deleted = 1 WHERE id = ?', [id]);
+        try {
+            await pool.execute('UPDATE activities SET is_deleted = 1 WHERE type = \'meeting\' AND reference_id = ?', [id]);
+        } catch (activityErr) {
+            console.error('Failed to propagate meeting deletion to activities:', activityErr);
+        }
         res.json({ success: true, data: { id, deleted: true } });
     } catch (err) {
         console.error('Delete meeting error:', err);

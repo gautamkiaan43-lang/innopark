@@ -2,7 +2,7 @@ require('dotenv').config();
 const pool = require('../config/db');
 
 async function checkAll() {
-  const tables = ['contacts'];
+  const tables = ['deals'];
   for (const table of tables) {
     try {
       const [columns] = await pool.execute(`DESCRIBE ${table}`);

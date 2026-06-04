@@ -1146,5 +1146,6 @@
   "You can only delete your own time logs": "Sie können nur Ihre eigenen Zeitprotokolle löschen",
   "Time log deleted successfully": "Zeitprotokoll erfolgreich gelöscht",
   "Failed to fetch users": "Benutzer konnten nicht abgerufen werden",
-  "Password reset successfully": "Passwort erfolgreich zurückgesetzt"
+  "Password reset successfully": "Passwort erfolgreich zurückgesetzt",
+  "api_msg_lead_already_converted": "Interessent bereits konvertiert"
 }

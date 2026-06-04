@@ -113,7 +113,8 @@ exports.createCall = async (req, res) => {
       duration_minutes: callData.duration_minutes || 0,
       subject: callData.subject || null,
       message: callData.message || null,
-      created_by: req.user?.id || null
+      created_by: req.user?.id || null,
+      author_id: req.user?.id || 1
     };
 
     const [result] = await pool.query(

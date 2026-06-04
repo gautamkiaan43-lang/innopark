@@ -124,7 +124,9 @@ const createWithExtras = async (req, res) => {
             type, description, reference_type, reference_id,
             entity_type, entity_id,
             is_pinned, follow_up_at, meeting_link,
-            title, assigned_to, deadline, meeting_date, meeting_time, participants
+            title, assigned_to, deadline, meeting_date, meeting_time, participants,
+            call_type, duration, email_subject, email_body, recipient_email,
+            priority, start_time, end_time
         } = req.body;
         const created_by = req.user?.id || req.body.created_by;
 
@@ -195,15 +197,19 @@ const createWithExtras = async (req, res) => {
                 entity_type, entity_id,
                 lead_id, company_id, contact_id, deal_id, 
                 created_by, assigned_to, is_pinned, follow_up_at, 
-                deadline, meeting_date, meeting_time, participants, meeting_link
+                deadline, meeting_date, meeting_time, participants, meeting_link,
+                call_type, duration, email_subject, email_body, recipient_email,
+                priority, start_time, end_time
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 type, title && title !== '' ? title : null, description && description !== '' ? description : null, entity_type, entity_id,
                 entity_type, entity_id,
                 lead_id, company_id, contact_id, deal_id,
                 creatorId, assigneeId, pinned, (follow_up_at && follow_up_at !== '') ? follow_up_at : null,
-                (deadline && deadline !== '') ? deadline : null, (meeting_date && meeting_date !== '') ? meeting_date : null, (meeting_time && meeting_time !== '') ? meeting_time : null, (participants && participants !== '') ? participants : null, (meeting_link && meeting_link !== '') ? meeting_link : null
+                (deadline && deadline !== '') ? deadline : null, (meeting_date && meeting_date !== '') ? meeting_date : null, (meeting_time && meeting_time !== '') ? meeting_time : null, (participants && participants !== '') ? participants : null, (meeting_link && meeting_link !== '') ? meeting_link : null,
+                call_type || null, duration ? parseInt(duration, 10) : 0, email_subject || null, email_body || null, recipient_email || null,
+                priority || 'medium', (start_time && start_time !== '') ? start_time : null, (end_time && end_time !== '') ? end_time : null
             ]
         );
 
@@ -212,7 +218,8 @@ const createWithExtras = async (req, res) => {
             data: {
                 id: result.insertId,
                 type, title, description, entity_type, entity_id,
-                is_pinned: !!is_pinned, follow_up_at, deadline, meeting_date, meeting_time, participants, meeting_link
+                is_pinned: !!is_pinned, follow_up_at, deadline, meeting_date, meeting_time, participants, meeting_link,
+                call_type, duration, email_subject, email_body, recipient_email, priority, start_time, end_time
             }
         });
     } catch (error) {
@@ -235,7 +242,8 @@ const update = async (req, res) => {
         const {
             description, follow_up_at, meeting_link,
             title, assigned_to, deadline, meeting_date, meeting_time, participants,
-            is_pinned
+            is_pinned, call_type, duration, email_subject, email_body, recipient_email,
+            priority, start_time, end_time
         } = req.body;
 
         const [result] = await pool.execute(
@@ -249,7 +257,15 @@ const update = async (req, res) => {
                 participants = COALESCE(?, participants),
                 follow_up_at = COALESCE(?, follow_up_at), 
                 meeting_link = COALESCE(?, meeting_link),
-                is_pinned = COALESCE(?, is_pinned)
+                is_pinned = COALESCE(?, is_pinned),
+                call_type = COALESCE(?, call_type),
+                duration = COALESCE(?, duration),
+                email_subject = COALESCE(?, email_subject),
+                email_body = COALESCE(?, email_body),
+                recipient_email = COALESCE(?, recipient_email),
+                priority = COALESCE(?, priority),
+                start_time = COALESCE(?, start_time),
+                end_time = COALESCE(?, end_time)
             WHERE id = ? AND is_deleted = 0`,
             [
                 description && description !== '' ? description : null,
@@ -269,6 +285,14 @@ const update = async (req, res) => {
                 (follow_up_at && follow_up_at !== '') ? follow_up_at : null,
                 (meeting_link && meeting_link !== '') ? meeting_link : null,
                 is_pinned !== undefined ? (is_pinned ? 1 : 0) : null,
+                call_type && call_type !== '' ? call_type : null,
+                duration !== undefined ? parseInt(duration, 10) : null,
+                email_subject && email_subject !== '' ? email_subject : null,
+                email_body && email_body !== '' ? email_body : null,
+                recipient_email && recipient_email !== '' ? recipient_email : null,
+                priority && priority !== '' ? priority : null,
+                (start_time && start_time !== '') ? start_time : null,
+                (end_time && end_time !== '') ? end_time : null,
                 id
             ]
         );

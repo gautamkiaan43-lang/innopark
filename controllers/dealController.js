@@ -52,12 +52,17 @@ const normalizeDealStatus = (status) => {
         'won': 'Accepted',
         'gewonnen': 'Accepted',
         'accepted': 'Accepted',
-        'sent': 'Sent',
-        'gesendet': 'Sent',
-        'draft': 'Draft',
-        'entwurf': 'Draft',
+        'lost': 'Declined',
+        'verloren': 'Declined',
         'declined': 'Declined',
         'abgelehnt': 'Declined',
+        'sent': 'Sent',
+        'gesendet': 'Sent',
+        'proposal': 'Sent',
+        'vorschlag': 'Sent',
+        'angebot': 'Sent',
+        'draft': 'Draft',
+        'entwurf': 'Draft',
         'expired': 'Expired',
         'abgelaufen': 'Expired'
     };
@@ -614,20 +619,14 @@ const updateStage = async (req, res) => {
         const old_stage_id = deals[0].stage_id;
         const old_status = deals[0].status;
 
-        // 2. Fetch stage names
+        // 2. Fetch stage name
         let oldStageName = old_status || 'Unknown';
         if (old_stage_id) {
-            const [oldStageRows] = await pool.execute(
-                'SELECT name COLLATE utf8mb4_unicode_ci AS name FROM deal_pipeline_stages WHERE id = ? UNION SELECT name COLLATE utf8mb4_unicode_ci AS name FROM deal_stages WHERE id = ?', 
-                [old_stage_id, old_stage_id]
-            );
+            const [oldStageRows] = await pool.execute('SELECT name FROM deal_pipeline_stages WHERE id = ?', [old_stage_id]);
             if (oldStageRows.length > 0) oldStageName = oldStageRows[0].name;
         }
 
-        const [newStageRows] = await pool.execute(
-            'SELECT name COLLATE utf8mb4_unicode_ci AS name, color COLLATE utf8mb4_unicode_ci AS color FROM deal_pipeline_stages WHERE id = ? UNION SELECT name COLLATE utf8mb4_unicode_ci AS name, color COLLATE utf8mb4_unicode_ci AS color FROM deal_stages WHERE id = ?', 
-            [stage_id, stage_id]
-        );
+        const [newStageRows] = await pool.execute('SELECT name FROM deal_pipeline_stages WHERE id = ?', [stage_id]);
         if (newStageRows.length === 0) {
             return res.status(400).json({ success: false, error: "Invalid stage_id" });
         }
@@ -637,65 +636,69 @@ const updateStage = async (req, res) => {
         const updates = ['stage_id = ?'];
         const values = [stage_id];
 
+        // Also update stage text column if it exists (added by migration)
+        try {
+            const [stageColCheck] = await pool.execute("SHOW COLUMNS FROM deals LIKE 'stage'");
+            if (stageColCheck.length > 0) {
+                updates.push('stage = ?');
+                values.push(newStageName);
+            }
+        } catch (e) { /* ignore */ }
+
         if (pipeline_id) {
             updates.push('pipeline_id = ?');
             values.push(pipeline_id);
         }
 
-        // Auto Won/Lost logic!
-        let newStatus = old_status;
-        if (newStageName.toLowerCase() === 'won' || newStageName.toLowerCase() === 'gewonnen') {
-            updates.push("status = 'Won'");
-            newStatus = 'Won';
-        } else if (newStageName.toLowerCase() === 'lost' || newStageName.toLowerCase() === 'verloren') {
-            updates.push("status = 'Lost'");
-            newStatus = 'Lost';
-        } else {
-            updates.push("status = ?");
-            newStatus = newStageName;
-            values.push(newStageName);
+        // Only update status when value is a valid ENUM — prevents 'Data truncated for column status' error
+        const normalizedStatus = normalizeDealStatus(newStageName);
+        if (DEAL_STATUS_ALLOWED.includes(normalizedStatus)) {
+            updates.push('status = ?');
+            values.push(normalizedStatus);
         }
 
         updates.push('updated_at = CURRENT_TIMESTAMP');
         values.push(id);
 
-        const [result] = await pool.execute(
-            `UPDATE deals SET ${updates.join(', ')} WHERE id = ?`,
-            values
-        );
+        const [result] = await pool.execute(`UPDATE deals SET ${updates.join(', ')} WHERE id = ?`, values);
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ success: false, error: req.t ? req.t('api_msg_f85a8ec8') : "Deal not found" });
         }
 
-        // 4. Save history to stage_history
-        await pool.execute(
-            'INSERT INTO stage_history (entity_type, entity_id, old_stage_id, new_stage_id, changed_by) VALUES (?, ?, ?, ?, ?)',
-            ['deal', id, old_stage_id || null, stage_id, userId]
-        );
+        // 4. Save stage history (safe — skip if table missing)
+        try {
+            await pool.execute(
+                'INSERT INTO stage_history (entity_type, entity_id, old_stage_id, new_stage_id, changed_by) VALUES (?, ?, ?, ?, ?)',
+                ['deal', id, old_stage_id || null, stage_id, userId]
+            );
+        } catch (e) { /* stage_history table may not exist */ }
 
-        // 5. Get current user's name
-        const [users] = await pool.execute('SELECT name FROM users WHERE id = ?', [userId]);
-        const userName = users.length > 0 ? users[0].name : 'System';
+        // 5. Get user name for activity log
+        let userName = 'System';
+        try {
+            const [users] = await pool.execute('SELECT name FROM users WHERE id = ?', [userId]);
+            if (users.length > 0) userName = users[0].name;
+        } catch (e) { /* ignore */ }
 
-        // 6. Save activity timeline entry
-        const description = `${userName} changed stage to ${newStageName}`;
-        const activityTitle = `Stage changed: ${oldStageName} → ${newStageName}`;
+        // 6. Add activity timeline entry (non-critical)
+        try {
+            const activityTitle = `Stage changed: ${oldStageName} \u2192 ${newStageName}`;
+            const actDescription = `${userName} changed stage to ${newStageName}`;
+            await pool.execute(
+                `INSERT INTO activities (
+                    type, title, description, reference_type, reference_id,
+                    entity_type, entity_id, deal_id, created_by, assigned_to
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ['comment', activityTitle, actDescription, 'deal', id, 'deal', id, id, userId, userId]
+            );
+        } catch (e) { /* activity insert is non-critical */ }
 
-        await pool.execute(
-            `INSERT INTO activities (
-                type, title, description, reference_type, reference_id, 
-                entity_type, entity_id, deal_id, created_by, assigned_to
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            ['comment', activityTitle, description, 'deal', id, 'deal', id, id, userId, userId]
-        );
-
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: req.t ? req.t('api_msg_0189282e') : "Deal stage updated successfully",
             stage_name: newStageName,
-            status: newStatus
+            status: normalizedStatus
         });
     } catch (error) {
         console.error('Update deal stage error:', error);

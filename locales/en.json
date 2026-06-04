@@ -1146,5 +1146,6 @@
   "api_msg_ead5045d": "Failed to fetch time log",
   "api_msg_4940f8a1": "Failed to fetch time log statistics",
   "api_msg_b086e394": "Password reset successfully",
-  "api_msg_d7d46abd": "Failed to reset password"
+  "api_msg_d7d46abd": "Failed to reset password",
+  "api_msg_lead_already_converted": "Lead already converted"
 }

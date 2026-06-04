@@ -23,6 +23,12 @@ const migrationService = {
             // 4. Ensure activities has entity_type and entity_id columns
             await migrationService.ensureEntityColumnsForActivities();
 
+            // Ensure activities.type column is modified to VARCHAR(50)
+            await migrationService.fixActivitiesTable();
+
+            // Ensure lead_calls table author_id column is nullable
+            await migrationService.fixLeadCallsTable();
+
             // 5. Ensure lead conversion schema is aligned
             await migrationService.ensureLeadConversionSchema();
 
@@ -140,6 +146,55 @@ const migrationService = {
             }
         } catch (error) {
             console.warn(`⚠️ Could not ensure entity columns for activities: ${error.message}`);
+        }
+    },
+
+    fixActivitiesTable: async () => {
+        try {
+            console.log('🛠️ Fixing activities table type column...');
+            // Step 1: Alter to VARCHAR(50) NULL first to allow safe type migration
+            await pool.execute(`ALTER TABLE activities MODIFY COLUMN type VARCHAR(50) NULL`);
+            
+            // Step 2: Safe-guard existing records: update any NULL or empty types to 'note'
+            await pool.execute(`UPDATE activities SET type = 'note' WHERE type IS NULL OR type = ''`);
+            
+            // Step 3: Enforce NOT NULL with a default value of 'note'
+            await pool.execute(`ALTER TABLE activities MODIFY COLUMN type VARCHAR(50) NOT NULL DEFAULT 'note'`);
+            
+            // Step 4: Check and add call_type column
+            const [callTypeCol] = await pool.execute(`SHOW COLUMNS FROM activities LIKE 'call_type'`);
+            if (callTypeCol.length === 0) {
+                console.log('🛠️ Adding activities.call_type column...');
+                await pool.execute(`ALTER TABLE activities ADD COLUMN call_type VARCHAR(20) NULL`);
+            }
+            
+            // Step 5: Check and add duration column
+            const [durationCol] = await pool.execute(`SHOW COLUMNS FROM activities LIKE 'duration'`);
+            if (durationCol.length === 0) {
+                console.log('🛠️ Adding activities.duration column...');
+                await pool.execute(`ALTER TABLE activities ADD COLUMN duration INT NULL DEFAULT 0`);
+            }
+
+            console.log('✅ Activities table schema successfully verified and updated.');
+        } catch (error) {
+            console.warn(`⚠️ Could not modify activities table schema: ${error.message}`);
+        }
+    },
+
+    fixLeadCallsTable: async () => {
+        try {
+            console.log('🛠️ Fixing lead_calls table author_id column...');
+            const [tables] = await pool.query("SHOW TABLES LIKE 'lead_calls'");
+            if (tables.length > 0) {
+                const [columns] = await pool.execute("SHOW COLUMNS FROM lead_calls LIKE 'author_id'");
+                if (columns.length > 0) {
+                    console.log('🛠️ Making lead_calls.author_id nullable...');
+                    await pool.execute("ALTER TABLE lead_calls MODIFY COLUMN author_id INT UNSIGNED NULL DEFAULT NULL");
+                    console.log('✅ lead_calls.author_id made nullable successfully.');
+                }
+            }
+        } catch (error) {
+            console.warn(`⚠️ Could not fix lead_calls table: ${error.message}`);
         }
     },
 
