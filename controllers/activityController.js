@@ -191,27 +191,74 @@ const createWithExtras = async (req, res) => {
         }
 
         const pinned = is_pinned ? 1 : 0;
-        const [result] = await pool.execute(
-            `INSERT INTO activities (
-                type, title, description, reference_type, reference_id, 
-                entity_type, entity_id,
-                lead_id, company_id, contact_id, deal_id, 
-                created_by, assigned_to, is_pinned, follow_up_at, 
-                deadline, meeting_date, meeting_time, participants, meeting_link,
-                call_type, duration, email_subject, email_body, recipient_email,
-                priority, start_time, end_time
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                type, title && title !== '' ? title : null, description && description !== '' ? description : null, entity_type, entity_id,
-                entity_type, entity_id,
-                lead_id, company_id, contact_id, deal_id,
-                creatorId, assigneeId, pinned, (follow_up_at && follow_up_at !== '') ? follow_up_at : null,
-                (deadline && deadline !== '') ? deadline : null, (meeting_date && meeting_date !== '') ? meeting_date : null, (meeting_time && meeting_time !== '') ? meeting_time : null, (participants && participants !== '') ? participants : null, (meeting_link && meeting_link !== '') ? meeting_link : null,
-                call_type || null, duration ? parseInt(duration, 10) : 0, email_subject || null, email_body || null, recipient_email || null,
-                priority || 'medium', (start_time && start_time !== '') ? start_time : null, (end_time && end_time !== '') ? end_time : null
-            ]
-        );
+        let result;
+        try {
+            [result] = await pool.execute(
+                `INSERT INTO activities (
+                    type, title, description, reference_type, reference_id, 
+                    entity_type, entity_id,
+                    lead_id, company_id, contact_id, deal_id, 
+                    created_by, assigned_to, is_pinned, follow_up_at, 
+                    deadline, meeting_date, meeting_time, participants, meeting_link,
+                    call_type, duration, email_subject, email_body, recipient_email,
+                    priority, start_time, end_time
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    type, title && title !== '' ? title : null, description && description !== '' ? description : null, entity_type, entity_id,
+                    entity_type, entity_id,
+                    lead_id, company_id, contact_id, deal_id,
+                    creatorId, assigneeId, pinned, (follow_up_at && follow_up_at !== '') ? follow_up_at : null,
+                    (deadline && deadline !== '') ? deadline : null, (meeting_date && meeting_date !== '') ? meeting_date : null, (meeting_time && meeting_time !== '') ? meeting_time : null, (participants && participants !== '') ? participants : null, (meeting_link && meeting_link !== '') ? meeting_link : null,
+                    call_type || null, duration ? parseInt(duration, 10) : 0, email_subject || null, email_body || null, recipient_email || null,
+                    priority || 'medium', (start_time && start_time !== '') ? start_time : null, (end_time && end_time !== '') ? end_time : null
+                ]
+            );
+        } catch (dbError) {
+            // Self-healing check: If there is an unknown column error (ER_BAD_FIELD_ERROR)
+            if (dbError.code === 'ER_BAD_FIELD_ERROR' || dbError.errno === 1054 || (dbError.message && dbError.message.includes('Unknown column'))) {
+                console.warn('⚠️ Unknown column error detected. Running migrations immediately to self-heal activities table schema...');
+                try {
+                    const migrationService = require('../services/migrationService');
+                    await migrationService.run();
+                    
+                    // Retry original insert statement
+                    console.log('🔄 Retrying original insert statement...');
+                    [result] = await pool.execute(
+                        `INSERT INTO activities (
+                            type, title, description, reference_type, reference_id, 
+                            entity_type, entity_id,
+                            lead_id, company_id, contact_id, deal_id, 
+                            created_by, assigned_to, is_pinned, follow_up_at, 
+                            deadline, meeting_date, meeting_time, participants, meeting_link,
+                            call_type, duration, email_subject, email_body, recipient_email,
+                            priority, start_time, end_time
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [
+                            type, title && title !== '' ? title : null, description && description !== '' ? description : null, entity_type, entity_id,
+                            entity_type, entity_id,
+                            lead_id, company_id, contact_id, deal_id,
+                            creatorId, assigneeId, pinned, (follow_up_at && follow_up_at !== '') ? follow_up_at : null,
+                            (deadline && deadline !== '') ? deadline : null, (meeting_date && meeting_date !== '') ? meeting_date : null, (meeting_time && meeting_time !== '') ? meeting_time : null, (participants && participants !== '') ? participants : null, (meeting_link && meeting_link !== '') ? meeting_link : null,
+                            call_type || null, duration ? parseInt(duration, 10) : 0, email_subject || null, email_body || null, recipient_email || null,
+                            priority || 'medium', (start_time && start_time !== '') ? start_time : null, (end_time && end_time !== '') ? end_time : null
+                        ]
+                    );
+                } catch (retryError) {
+                    console.error('❌ Retry failed. Falling back to core insert query:', retryError.message);
+                    // Critical Fallback: Insert using only basic columns guaranteed to exist
+                    [result] = await pool.execute(
+                        `INSERT INTO activities 
+                        (type, description, reference_type, reference_id, created_by, assigned_to)
+                        VALUES (?, ?, ?, ?, ?, ?)`,
+                        [type, description && description !== '' ? description : null, entity_type, entity_id, creatorId, assigneeId]
+                    );
+                }
+            } else {
+                throw dbError;
+            }
+        }
 
         return res.json({
             success: true,

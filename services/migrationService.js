@@ -151,29 +151,60 @@ const migrationService = {
 
     fixActivitiesTable: async () => {
         try {
-            console.log('🛠️ Fixing activities table type column...');
-            // Step 1: Alter to VARCHAR(50) NULL first to allow safe type migration
+            console.log('🛠️ Fixing activities table schema (all columns)...');
+
+            // Step 1: Alter type to VARCHAR(50) NULL first to allow safe migration
             await pool.execute(`ALTER TABLE activities MODIFY COLUMN type VARCHAR(50) NULL`);
-            
+
             // Step 2: Safe-guard existing records: update any NULL or empty types to 'note'
             await pool.execute(`UPDATE activities SET type = 'note' WHERE type IS NULL OR type = ''`);
-            
+
             // Step 3: Enforce NOT NULL with a default value of 'note'
             await pool.execute(`ALTER TABLE activities MODIFY COLUMN type VARCHAR(50) NOT NULL DEFAULT 'note'`);
-            
-            // Step 4: Check and add call_type column
-            const [callTypeCol] = await pool.execute(`SHOW COLUMNS FROM activities LIKE 'call_type'`);
-            if (callTypeCol.length === 0) {
-                console.log('🛠️ Adding activities.call_type column...');
-                await pool.execute(`ALTER TABLE activities ADD COLUMN call_type VARCHAR(20) NULL`);
+
+            // Step 4: Fetch current columns once and check all missing ones
+            const [existingCols] = await pool.execute(`SHOW COLUMNS FROM activities`);
+            const colNames = existingCols.map(c => c.Field.toLowerCase());
+
+            const columnsToAdd = [
+                { name: 'entity_type',      ddl: `ALTER TABLE activities ADD COLUMN entity_type VARCHAR(50) NULL AFTER reference_id` },
+                { name: 'entity_id',        ddl: `ALTER TABLE activities ADD COLUMN entity_id INT NULL AFTER entity_type` },
+                { name: 'call_type',        ddl: `ALTER TABLE activities ADD COLUMN call_type VARCHAR(20) NULL` },
+                { name: 'duration',         ddl: `ALTER TABLE activities ADD COLUMN duration INT NULL DEFAULT 0` },
+                { name: 'email_subject',    ddl: `ALTER TABLE activities ADD COLUMN email_subject VARCHAR(500) NULL` },
+                { name: 'email_body',       ddl: `ALTER TABLE activities ADD COLUMN email_body TEXT NULL` },
+                { name: 'recipient_email',  ddl: `ALTER TABLE activities ADD COLUMN recipient_email VARCHAR(255) NULL` },
+                { name: 'priority',         ddl: `ALTER TABLE activities ADD COLUMN priority VARCHAR(20) NULL DEFAULT 'medium'` },
+                { name: 'start_time',       ddl: `ALTER TABLE activities ADD COLUMN start_time TIME NULL` },
+                { name: 'end_time',         ddl: `ALTER TABLE activities ADD COLUMN end_time TIME NULL` },
+            ];
+
+            // Widen reference_type column to VARCHAR(50) NULL to prevent enum truncation errors
+            console.log('🛠️ Widening reference_type to VARCHAR(50) in activities table...');
+            try {
+                await pool.execute(`ALTER TABLE activities MODIFY COLUMN reference_type VARCHAR(50) NULL`);
+            } catch (err) {
+                console.warn(`⚠️ Could not modify reference_type column: ${err.message}`);
             }
-            
-            // Step 5: Check and add duration column
-            const [durationCol] = await pool.execute(`SHOW COLUMNS FROM activities LIKE 'duration'`);
-            if (durationCol.length === 0) {
-                console.log('🛠️ Adding activities.duration column...');
-                await pool.execute(`ALTER TABLE activities ADD COLUMN duration INT NULL DEFAULT 0`);
+
+            for (const col of columnsToAdd) {
+                if (!colNames.includes(col.name)) {
+                    console.log(`🛠️ Adding activities.${col.name} column...`);
+                    try {
+                        await pool.execute(col.ddl);
+                    } catch (colErr) {
+                        console.warn(`⚠️ Could not add activities.${col.name}: ${colErr.message}`);
+                    }
+                }
             }
+
+            // Populate entity_type/entity_id from reference columns for old rows
+            await pool.execute(`
+                UPDATE activities
+                SET entity_type = reference_type, entity_id = reference_id
+                WHERE (entity_type IS NULL OR entity_id IS NULL)
+                  AND reference_type IS NOT NULL AND reference_id IS NOT NULL
+            `);
 
             console.log('✅ Activities table schema successfully verified and updated.');
         } catch (error) {

@@ -429,22 +429,49 @@ const create = async (req, res) => {
     const refId = related_to_id || finalProjectId || null;
 
     const creatorName = req.user?.name || 'Admin';
-    await pool.execute(
-      `INSERT INTO activities (type, title, description, reference_type, reference_id, entity_type, entity_id, lead_id, deal_id, contact_id, company_id, created_by, is_completed)
-       VALUES ('task', 'Task created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      [
-        `${creatorName} created task: ${title}`,
-        refType,
-        refId,
-        refType,
-        refId,
-        finalLeadId,
-        finalDealId,
-        finalContactId,
-        finalCompanyId,
-        createdBy
-      ]
-    );
+    try {
+      await pool.execute(
+        `INSERT INTO activities (type, title, description, reference_type, reference_id, entity_type, entity_id, lead_id, deal_id, contact_id, company_id, created_by, is_completed)
+         VALUES ('task', 'Task created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          `${creatorName} created task: ${title}`,
+          refType,
+          refId,
+          refType,
+          refId,
+          finalLeadId,
+          finalDealId,
+          finalContactId,
+          finalCompanyId,
+          createdBy
+        ]
+      );
+    } catch (activityErr) {
+      console.warn('⚠️ Task activity propagation failed. Running schema migration self-heal...', activityErr.message);
+      try {
+        const migrationService = require('../services/migrationService');
+        await migrationService.run();
+        // Retry insert
+        await pool.execute(
+          `INSERT INTO activities (type, title, description, reference_type, reference_id, entity_type, entity_id, lead_id, deal_id, contact_id, company_id, created_by, is_completed)
+           VALUES ('task', 'Task created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+          [
+            `${creatorName} created task: ${title}`,
+            refType,
+            refId,
+            refType,
+            refId,
+            finalLeadId,
+            finalDealId,
+            finalContactId,
+            finalCompanyId,
+            createdBy
+          ]
+        );
+      } catch (retryErr) {
+        console.error('❌ Failed to propagate task to activities, but proceeding with task creation:', retryErr.message);
+      }
+    }
 
     res.status(201).json({ success: true, id: taskId, message: "Task created successfully" });
   } catch (err) {

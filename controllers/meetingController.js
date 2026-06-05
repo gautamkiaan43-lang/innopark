@@ -113,35 +113,77 @@ const create = async (req, res) => {
                 else if (related_to_type === 'contact') contact_id = related_to_id;
                 else if (related_to_type === 'company') company_id = related_to_id;
 
-                await pool.execute(
-                    `INSERT INTO activities (
-                        type, title, description, reference_type, reference_id, 
-                        entity_type, entity_id,
-                        lead_id, company_id, contact_id, deal_id, 
-                        created_by, assigned_to, 
-                        meeting_date, meeting_time, start_time, end_time, meeting_link
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [
-                        'meeting',
-                        title,
-                        description || null,
-                        'meeting',
-                        newMeetingId,
-                        related_to_type,
-                        related_to_id,
-                        lead_id,
-                        company_id,
-                        contact_id,
-                        deal_id,
-                        createdBy,
-                        finalAssignedTo,
-                        meeting_date,
-                        start_time,
-                        start_time,
-                        end_time,
-                        location || null
-                    ]
-                );
+                try {
+                    await pool.execute(
+                        `INSERT INTO activities (
+                            type, title, description, reference_type, reference_id, 
+                            entity_type, entity_id,
+                            lead_id, company_id, contact_id, deal_id, 
+                            created_by, assigned_to, 
+                            meeting_date, meeting_time, start_time, end_time, meeting_link
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [
+                            'meeting',
+                            title,
+                            description || null,
+                            'meeting',
+                            newMeetingId,
+                            related_to_type,
+                            related_to_id,
+                            lead_id,
+                            company_id,
+                            contact_id,
+                            deal_id,
+                            createdBy,
+                            finalAssignedTo,
+                            meeting_date,
+                            start_time,
+                            start_time,
+                            end_time,
+                            location || null
+                        ]
+                    );
+                } catch (activityErr) {
+                    console.warn('⚠️ Meeting activity propagation failed. Running schema migration self-heal...', activityErr.message);
+                    try {
+                        const migrationService = require('../services/migrationService');
+                        await migrationService.run();
+                        
+                        // Retry insert once
+                        await pool.execute(
+                            `INSERT INTO activities (
+                                type, title, description, reference_type, reference_id, 
+                                entity_type, entity_id,
+                                lead_id, company_id, contact_id, deal_id, 
+                                created_by, assigned_to, 
+                                meeting_date, meeting_time, start_time, end_time, meeting_link
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            [
+                                'meeting',
+                                title,
+                                description || null,
+                                'meeting',
+                                newMeetingId,
+                                related_to_type,
+                                related_to_id,
+                                lead_id,
+                                company_id,
+                                contact_id,
+                                deal_id,
+                                createdBy,
+                                finalAssignedTo,
+                                meeting_date,
+                                start_time,
+                                start_time,
+                                end_time,
+                                location || null
+                            ]
+                        );
+                        console.log('✅ Meeting activity propagation retry succeeded!');
+                    } catch (retryErr) {
+                        console.error('❌ Failed to propagate meeting to activities, but proceeding with meeting creation:', retryErr.message);
+                    }
+                }
             }
         }
 
